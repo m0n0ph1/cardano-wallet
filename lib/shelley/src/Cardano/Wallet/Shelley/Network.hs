@@ -447,14 +447,16 @@ withNetworkLayerBase tr np conn (versionData, _) action = do
 
             AnyCardanoEra ShelleyEra -> do
                 let cmd = CmdSubmitTx $ unsealShelleyTx GenTxShelley tx
-                result <- liftIO $ localTxSubmissionQ `send` cmd
+                result <- liftIO $
+                    localTxSubmissionQ `send` cmd
                 case result of
                     SubmitSuccess -> pure ()
                     SubmitFail err -> throwE $ ErrPostTxBadRequest $ T.pack (show err)
 
             AnyCardanoEra AllegraEra -> do
                 let cmd = CmdSubmitTx $ unsealShelleyTx GenTxAllegra tx
-                result <- liftIO $ localTxSubmissionQ `send` cmd
+                result <- liftIO $
+                    localTxSubmissionQ `send` cmd
                 case result of
                     SubmitSuccess -> pure ()
                     SubmitFail err -> throwE $ ErrPostTxBadRequest $ T.pack (show err)

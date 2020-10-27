@@ -69,6 +69,8 @@ library
     , retry
     , say
     , scrypt
+    , stm
+    , exceptions
     , template-haskell
     , text
     , text-class
@@ -83,6 +85,7 @@ library
       Test.Integration.Framework.Context
       Test.Integration.Framework.DSL
       Test.Integration.Framework.Request
+      Test.Integration.Framework.Profile
       Test.Integration.Framework.TestData
       Test.Integration.Scenario.API.Byron.Wallets
       Test.Integration.Scenario.API.Byron.HWWallets

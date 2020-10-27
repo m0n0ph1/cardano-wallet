@@ -113,7 +113,7 @@ import System.FilePath
 import System.IO
     ( BufferMode (..), hSetBuffering, stderr, stdout )
 import Test.Hspec
-    ( hspec )
+    ( afterAll, hspec )
 import Test.Hspec.Core.Spec
     ( Spec, SpecWith, describe, parallel, sequential )
 import Test.Hspec.Extra
@@ -127,6 +127,8 @@ import Test.Integration.Faucet
     )
 import Test.Integration.Framework.Context
     ( Context (..), PoolGarbageCollectionEvent (..) )
+import Test.Integration.Framework.Profile
+    ( logTestProfile )
 import Test.Utils.Paths
     ( getTestData, inNixBuild )
 import UnliftIO.Async
@@ -167,7 +169,7 @@ import qualified Test.Integration.Scenario.CLI.Shelley.Wallets as WalletsCLI
 main :: forall n. (n ~ 'Mainnet) => IO ()
 main = withTestsSetup $ \testDir tracers -> do
     nix <- inNixBuild
-    hspec $ do
+    hspec $ afterAll (\_ -> logTestProfile) $ do
         describe "No backend required" $
             parallelIf (not nix) $ describe "Miscellaneous CLI tests"
                 MiscellaneousCLI.spec
