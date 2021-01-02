@@ -448,8 +448,6 @@ import Statistics.Quantile
     ( medianUnbiased, quantiles )
 import Type.Reflection
     ( Typeable, typeRep )
-import UnliftIO.Exception
-    ( Exception )
 import UnliftIO.MVar
     ( modifyMVar_, newMVar )
 
@@ -2343,9 +2341,19 @@ newtype ErrFetchRewards
 data ErrCheckWalletIntegrity
     = ErrCheckWalletIntegrityNoSuchWallet ErrNoSuchWallet
     | ErrCheckIntegrityDifferentGenesis (Hash "Genesis") (Hash "Genesis")
+    -- ^ Mismatch between expected and actual genesis hash.
     deriving (Eq, Show)
 
-instance Exception ErrCheckWalletIntegrity
+instance ToText ErrCheckWalletIntegrity where
+    toText = \case
+        ErrCheckWalletIntegrityNoSuchWallet (ErrNoSuchWallet wid) ->
+            "Wallet \"" <> toText wid <> "\" was expected to exist, " <>
+            "but it was not found in the database!"
+        ErrCheckIntegrityDifferentGenesis expected actual -> T.unlines
+            [ "Genesis hash mismatch!"
+            , "Genesis file specified: " <> toText expected
+            , "Database contains:      " <> toText actual
+            ]
 
 data ErrCannotJoin
     = ErrAlreadyDelegating PoolId
@@ -2491,6 +2499,7 @@ data WalletLog
     | MsgRewardBalanceExited
     | MsgTxSubmit TxSubmitLog
     | MsgIsStakeKeyRegistered Bool
+    | MsgIntegrityCheckFailed ErrCheckWalletIntegrity
     deriving (Show, Eq)
 
 instance ToText WalletFollowLog where
@@ -2554,6 +2563,9 @@ instance ToText WalletLog where
             "Wallet stake key is registered. Will not register it again."
         MsgIsStakeKeyRegistered False ->
             "Wallet stake key is not registered. Will register..."
+        MsgIntegrityCheckFailed err ->
+            "Integrity check failed when loading wallet: " <>
+            T.pack (show err)
 
 instance HasPrivacyAnnotation WalletFollowLog
 instance HasSeverityAnnotation WalletFollowLog where
@@ -2580,6 +2592,7 @@ instance HasSeverityAnnotation WalletLog where
         MsgRewardBalanceExited -> Notice
         MsgTxSubmit msg -> getSeverityAnnotation msg
         MsgIsStakeKeyRegistered _ -> Info
+        MsgIntegrityCheckFailed _ -> Error
 
 data TxSubmitLog
     = MsgPostTxResult (Hash "Tx") (Either ErrPostTx ())
