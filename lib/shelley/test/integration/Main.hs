@@ -113,7 +113,7 @@ import System.FilePath
 import System.IO
     ( BufferMode (..), hSetBuffering, stderr, stdout )
 import Test.Hspec
-    ( hspec )
+    ( afterAll, hspec )
 import Test.Hspec.Core.Spec
     ( Spec, SpecWith, describe, parallel, sequential )
 import Test.Hspec.Extra
@@ -126,8 +126,6 @@ import Test.Integration.Faucet
     )
 import Test.Integration.Framework.Context
     ( Context (..), PoolGarbageCollectionEvent (..) )
-import Test.Integration.Framework.DSL
-    ( KnownCommand (..) )
 import Test.Integration.Framework.Profile
     ( logTestProfile )
 import Test.Utils.Paths

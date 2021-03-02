@@ -68,6 +68,8 @@ library
     , retry
     , say
     , scrypt
+    , stm
+    , exceptions
     , template-haskell
     , text
     , text-class

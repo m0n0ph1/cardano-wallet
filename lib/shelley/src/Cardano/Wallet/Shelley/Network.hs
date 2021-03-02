@@ -448,7 +448,7 @@ withNetworkLayerBase tr np conn (versionData, _) action = do
 
             AnyCardanoEra ShelleyEra -> do
                 let cmd = CmdSubmitTx $ unsealShelleyTx GenTxShelley tx
-                result <- liftIO $ timeQryAndLog "postTx" tr $
+                result <- liftIO $
                     localTxSubmissionQ `send` cmd
                 case result of
                     SubmitSuccess -> pure ()
@@ -456,7 +456,7 @@ withNetworkLayerBase tr np conn (versionData, _) action = do
 
             AnyCardanoEra AllegraEra -> do
                 let cmd = CmdSubmitTx $ unsealShelleyTx GenTxAllegra tx
-                result <- liftIO $ timeQryAndLog "postTx" tr $
+                result <- liftIO $
                     localTxSubmissionQ `send` cmd
                 case result of
                     SubmitSuccess -> pure ()
