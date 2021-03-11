@@ -261,6 +261,7 @@ test-suite integration
     , cardano-wallet
     , cardano-wallet-test-utils
     , contra-tracer
+    , containers
     , directory
     , either
     , filepath

@@ -91,7 +91,7 @@ import Control.Tracer
 import Data.Either.Combinators
     ( whenLeft )
 import Data.IORef
-    ( IORef, atomicModifyIORef', newIORef )
+    ( IORef, atomicModifyIORef', newIORef, readIORef )
 import Data.Maybe
     ( fromMaybe )
 import Data.Proxy
@@ -112,12 +112,18 @@ import System.FilePath
     ( (</>) )
 import System.IO
     ( BufferMode (..), hSetBuffering, stderr, stdout )
-import Test.Hspec
-    ( hspec )
+import Test.Hspec.Core.Runner
+    ( Config (configFormatter)
+    , defaultConfig
+    , evaluateSummary
+    , readConfig
+    , runSpec
+    )
 import Test.Hspec.Core.Spec
     ( Spec, SpecWith, describe, parallel, sequential )
 import Test.Hspec.Extra
     ( aroundAll )
+import Test.Hspec.Formatters
 import Test.Integration.Faucet
     ( genRewardAccounts
     , maryIntegrationTestAssets
@@ -135,6 +141,21 @@ import UnliftIO.Exception
     ( SomeException, isAsyncException, throwIO, withException )
 import UnliftIO.MVar
     ( newEmptyMVar, putMVar, takeMVar )
+
+import Control.Monad
+    ( when )
+import Control.Monad.IO.Class
+    ( liftIO )
+import Data.IORef
+import Data.List
+    ( intercalate, sortBy )
+import qualified Data.Map.Strict as Map
+import Data.Maybe
+import Data.Ord
+import Numeric
+import System.Environment
+    ( getArgs, withArgs )
+import Test.Hspec.Formatters
 
 import qualified Cardano.BM.Backend.EKGView as EKG
 import qualified Cardano.Pool.DB as Pool
@@ -167,6 +188,12 @@ import qualified Test.Integration.Scenario.CLI.Shelley.Wallets as WalletsCLI
 main :: forall n. (n ~ 'Mainnet) => IO ()
 main = withTestsSetup $ \testDir tracers -> do
     nix <- inNixBuild
+    f <- timedFormatter 100 progress
+    let hspec spec =
+              getArgs
+          >>= readConfig (defaultConfig {configFormatter = Just f })
+          >>= withArgs [] . runSpec spec
+          >>= evaluateSummary
     hspec $ do
         describe "No backend required" $
             parallelIf (not nix) $ describe "Miscellaneous CLI tests"
@@ -207,6 +234,35 @@ main = withTestsSetup $ \testDir tracers -> do
                 NetworkCLI.spec
   where
     parallelIf flag = if flag then parallel else sequential
+
+-- | this is a formatter aimed at getting some rough-and-ready timing information
+--   out of hspec suites. It really only works on quickcheck tests, as they are
+--   the ones that report progress, but they are also usually the slowest.
+timedFormatter :: Int -> Formatter -> IO Formatter
+timedFormatter topn f = do
+  inflight <- newIORef Map.empty
+  finished <- newIORef Map.empty
+  pure $ f { exampleProgress = \ p prog -> do
+               case prog of
+                 (x1,x2) -> do
+                   now <- getRealTime
+                   -- we would prefer to do this by looking for the first element, but unfortunately it doesn't always
+                   -- get reported
+                   liftIO $ atomicModifyIORef' inflight (\x -> (Map.insertWith (\_new old -> old) p now x, ()))
+                   -- similarly, the last result does not seem to be reported.
+                   when (x1 + 1 == x2) $ do
+                     Seconds end <- getRealTime
+                     Seconds start <- fromMaybe (error $ "did not find an entry for " <> show prog <> ",should be impossible")
+                                      . Map.lookup p <$> liftIO (readIORef inflight)
+                     liftIO $ atomicModifyIORef' finished (\m -> (Map.insert p (end - start) m, ()))
+
+               (exampleProgress f) p prog,
+             footerFormatter = do
+               footerFormatter f
+               timings <- take topn . sortBy (comparing (Down . snd) ) . Map.toList <$> liftIO (readIORef finished)
+               mapM_ (writeLine . (\((path,final), time) -> prettyTime time <> " s: " <> intercalate "/" (path <> [final]))) timings
+           }
+  where prettyTime n = showFFloat (Just 2) n ""
 
 -- | Do all the program setup required for integration tests, create a temporary
 -- directory, and pass this info to the main hspec action.
