@@ -610,7 +610,7 @@ createIcarusWallet
     -> ExceptT ErrWalletAlreadyExists IO WalletId
 createIcarusWallet ctx wid wname credentials = db & \DBLayer{..} -> do
     let s = mkSeqStateFromRootXPrv @n credentials purposeBIP44 $
-            mkUnboundedAddressPoolGap 10000
+            mkUnboundedAddressPoolGap 20
     let (hist, cp) = initWallet block0 s
     let addrs = map (view #address) . concatMap (view #outputs . fst) $ hist
     let g  = defaultAddressPoolGap
