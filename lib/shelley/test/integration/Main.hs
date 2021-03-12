@@ -22,7 +22,7 @@ import Cardano.BM.Data.Tracer
 import Cardano.BM.Plugin
     ( loadPlugin )
 import Cardano.BM.Trace
-    ( appendName )
+    ( appendName, nullTracer )
 import Cardano.CLI
     ( LogOutput (..)
     , Port (..)
@@ -403,12 +403,11 @@ withTracers testDir action = do
     walletLogOutputs <- getLogOutputs walletMinSeverityFromEnv "wallet.log"
     testLogOutputs <- getLogOutputs testMinSeverityFromEnv "test.log"
 
-    withLogging walletLogOutputs $ \(sb, (cfg, walTr)) -> do
-        ekgEnabled >>= flip when (EKG.plugin cfg walTr sb >>= loadPlugin sb)
-        withLogging testLogOutputs $ \(_, (_, testTr)) -> do
-            let trTests = appendName "integration" testTr
-            let tracers = setupTracers (tracerSeverities (Just Debug)) walTr
-            action (trMessageText trTests, tracers)
+    let testTr = nullTracer
+    let walTr = nullTracer
+    let trTests = appendName "integration" testTr
+    let tracers = setupTracers (tracerSeverities (Just Debug)) walTr
+    action (trMessageText trTests, tracers)
 
 bracketTracer' :: Tracer IO TestsLog -> Text -> IO a -> IO a
 bracketTracer' tr name = bracketTracer (contramap (MsgBracket name) tr)
