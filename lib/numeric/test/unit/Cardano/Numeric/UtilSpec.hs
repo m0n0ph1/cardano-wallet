@@ -8,11 +8,18 @@ module Cardano.Numeric.UtilSpec
 import Prelude
 
 import Cardano.Numeric.Util
-    ( equipartitionNatural, padCoalesce, partitionNatural )
+    ( equipartitionNatural
+    , padCoalesce
+    , partitionNatural
+    , partitionNaturalWithPriority
+    , zeroSmallestUntilSumMinimalDistanceToTarget
+    )
+import Data.List
+    ( isSuffixOf )
 import Data.List.NonEmpty
     ( NonEmpty (..) )
 import Data.Maybe
-    ( catMaybes )
+    ( catMaybes, isJust, isNothing )
 import Data.Monoid
     ( Sum (..) )
 import Data.Ratio
@@ -23,9 +30,14 @@ import Test.Hspec
     ( Spec, describe, it )
 import Test.QuickCheck
     ( Arbitrary (..)
+    , Gen
     , Property
     , arbitrarySizedNatural
     , checkCoverage
+    , choose
+    , cover
+    , forAll
+    , oneof
     , property
     , shrink
     , shrinkIntegral
@@ -33,6 +45,7 @@ import Test.QuickCheck
     , (.&&.)
     , (.||.)
     , (===)
+    , (==>)
     )
 
 import qualified Data.Foldable as F
@@ -69,6 +82,34 @@ spec = do
             property prop_partitionNatural_sum
         it "prop_partitionNatural_fair" $
             withMaxSuccess 1000 $ checkCoverage prop_partitionNatural_fair
+
+    describe "partitionNaturalWithPriority" $ do
+
+        it "prop_partitionNaturalWithPriority_length" $
+            property prop_partitionNaturalWithPriority_length
+        it "prop_partitionNaturalWithPriority_sum" $
+            property prop_partitionNaturalWithPriority_sum
+        it "prop_partitionNaturalWithPriority_target_GT_sumWeights" $
+            property prop_partitionNaturalWithPriority_target_GT_sumWeights
+        it "prop_partitionNaturalWithPriority_target_EQ_sumWeights" $
+            property prop_partitionNaturalWithPriority_target_EQ_sumWeights
+        it "prop_partitionNaturalWithPriority_target_EQ_largestWeight" $
+            property prop_partitionNaturalWithPriority_target_EQ_largestWeight
+        it "prop_partitionNaturalWithPriority_target_LT_largestWeight" $
+            property prop_partitionNaturalWithPriority_target_LT_largestWeight
+        it "prop_partitionNaturalWithPriority_target_EQ_zero" $
+            property prop_partitionNaturalWithPriority_target_EQ_zero
+
+    describe "zeroSmallestUntilSumMinimalDistanceToTarget " $ do
+
+        it "prop_zeroSmallestUntilSumMinimalDistanceToTarget_coverage" $
+            property prop_zeroSmallestUntilSumMinimalDistanceToTarget_coverage
+        it "prop_zeroSmallestUntilSumMinimalDistanceToTarget_equality" $
+            property prop_zeroSmallestUntilSumMinimalDistanceToTarget_equality
+        it "prop_zeroSmallestUntilSumMinimalDistanceToTarget_length" $
+            property prop_zeroSmallestUntilSumMinimalDistanceToTarget_length
+        it "prop_zeroSmallestUntilSumMinimalDistanceToTarget_suffix" $
+            property prop_zeroSmallestUntilSumMinimalDistanceToTarget_suffix
 
 --------------------------------------------------------------------------------
 -- Coalescing values
@@ -173,6 +214,191 @@ prop_partitionNatural_fair target weights =
 
         totalWeight :: Natural
         totalWeight = F.sum weights
+
+--------------------------------------------------------------------------------
+-- Partitioning natural numbers with priority
+--------------------------------------------------------------------------------
+
+prop_partitionNaturalWithPriority_length
+    :: Natural
+    -> NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_length target weights =
+    checkCoverage $
+    cover 8 (isJust result)
+        "isJust" $
+    cover 1 (isNothing result)
+        "isNothing " $
+    case result of
+        Nothing -> F.sum weights === 0
+        Just ps -> F.length ps === F.length weights
+  where
+    result = partitionNaturalWithPriority target weights
+
+prop_partitionNaturalWithPriority_sum
+    :: Natural
+    -> NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_sum target weights =
+    checkCoverage $
+    cover 8 (isJust result)
+        "isJust" $
+    cover 1 (isNothing result)
+        "isNothing " $
+    case result of
+        Nothing -> F.sum weights === 0
+        Just ps -> F.sum ps === target
+  where
+    result = partitionNaturalWithPriority target weights
+
+prop_partitionNaturalWithPriority_target_GT_sumWeights
+    :: NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_target_GT_sumWeights weights =
+    sumWeights > 0 ==>
+    forAll genTarget $ \target ->
+        (===)
+            (partitionNaturalWithPriority target weights)
+            (partitionNatural             target weights)
+  where
+    genTarget :: Gen Natural
+    genTarget = fromIntegral @Integer @Natural <$> oneof
+        [ pure (fromIntegral sumWeights)
+        , choose
+            ( fromIntegral sumWeights + 1
+            , fromIntegral sumWeights * 1000
+            )
+        ]
+    sumWeights :: Natural
+    sumWeights = sum weights
+
+prop_partitionNaturalWithPriority_target_EQ_sumWeights
+    :: NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_target_EQ_sumWeights weights =
+    sumWeights > 0 ==>
+        (===)
+            (partitionNaturalWithPriority sumWeights weights)
+            (partitionNatural             sumWeights weights)
+  where
+    sumWeights :: Natural
+    sumWeights = sum weights
+
+prop_partitionNaturalWithPriority_target_EQ_largestWeight
+    :: NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_target_EQ_largestWeight weights =
+    sumWeights > 0 ==>
+    NE.filter (> 0) result === [largestWeight]
+  where
+    Just result = partitionNaturalWithPriority largestWeight weights
+
+    largestWeight :: Natural
+    largestWeight = maximum weights
+
+    sumWeights :: Natural
+    sumWeights = sum weights
+
+prop_partitionNaturalWithPriority_target_LT_largestWeight
+    :: NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_target_LT_largestWeight weights =
+    sumWeights > 0 ==>
+    forAll genTarget $ \target ->
+        let Just result = partitionNaturalWithPriority target weights in
+        NE.filter (> 0) result === [target]
+  where
+    genTarget :: Gen Natural
+    genTarget = fromIntegral @Integer @Natural <$>
+        choose (1, max 1 (fromIntegral largestWeight - 1))
+
+    largestWeight :: Natural
+    largestWeight = maximum weights
+
+    sumWeights :: Natural
+    sumWeights = sum weights
+
+prop_partitionNaturalWithPriority_target_EQ_zero
+    :: NonEmpty Natural
+    -> Property
+prop_partitionNaturalWithPriority_target_EQ_zero weights =
+    sumWeights > 0 ==>
+        result === (0 <$ weights)
+  where
+    Just result = partitionNaturalWithPriority 0 weights
+
+    sumWeights :: Natural
+    sumWeights = sum weights
+
+--------------------------------------------------------------------------------
+-- Minimizing the distance between a sum of weights and a target value.
+--------------------------------------------------------------------------------
+
+-- TODO: Use a dedicated data type to get the coverage we want.
+--
+-- It should test with
+--
+-- - different lengths of lists.
+-- - arrange that we cover:
+--     - one of the items being zeroed out
+--     - all of the items being zeroed out
+--     - other proportions
+--
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_coverage
+    :: NonEmpty Natural
+    -> Natural
+    -> Property
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_coverage as target =
+    property $
+    checkCoverage $
+    cover 10 (asSum > target)
+        "asSum > target" $
+    cover 1 (asSum == target)
+        "asSum = target" $
+    cover 1 (asSum < target)
+        "asSum < target" $
+    cover 10 (rsSum > 0)
+        "rsSum > 0" $
+    cover 1 (rsNonZeroCount > 1)
+        "rsNonZeroCount > 1" $
+    True
+  where
+    asSum = F.sum as
+    rsSum = F.sum rs
+    rsNonZeroCount = length $ filter (> 0) $ F.toList rs
+    rs = zeroSmallestUntilSumMinimalDistanceToTarget as target
+
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_equality
+    :: NonEmpty Natural
+    -> Natural
+    -> Property
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_equality as target
+    | total <= target =
+        as === rs
+    | otherwise =
+        property $ F.all (\(r, a) -> r == a || r == 0) (rs `NE.zip` as)
+  where
+    rs = zeroSmallestUntilSumMinimalDistanceToTarget as target
+    total = F.sum as
+
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_length
+    :: NonEmpty Natural
+    -> Natural
+    -> Property
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_length as target =
+    NE.length as ===
+    NE.length (zeroSmallestUntilSumMinimalDistanceToTarget as target)
+
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_suffix
+    :: NonEmpty Natural
+    -> Natural
+    -> Property
+prop_zeroSmallestUntilSumMinimalDistanceToTarget_suffix as target =
+    property $ dropWhile (== 0) rsSorted `isSuffixOf` asSorted
+  where
+    asSorted = NE.toList $ NE.sort as
+    rsSorted = NE.toList $ NE.sort $
+        zeroSmallestUntilSumMinimalDistanceToTarget as target
 
 --------------------------------------------------------------------------------
 -- Arbitrary instances

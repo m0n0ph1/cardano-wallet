@@ -10,7 +10,13 @@ module Cardano.Numeric.Util
       -- * Partitioning natural numbers
     , equipartitionNatural
     , partitionNatural
+    , partitionNaturalWithPriority
     , unsafePartitionNatural
+
+      -- * Miscellaneous
+    , cumulativeSum
+    , dropUntilSumMinimalDistanceToTarget
+    , zeroSmallestUntilSumMinimalDistanceToTarget
 
       -- * Partial orders
     , inAscendingPartialOrder
@@ -43,6 +49,7 @@ import Safe
 
 import qualified Data.Foldable as F
 import qualified Data.List.NonEmpty as NE
+import qualified Data.List.NonEmpty.Extra as NE
 
 --------------------------------------------------------------------------------
 -- Public functions
@@ -220,6 +227,113 @@ partitionNatural target weights
     totalWeight :: Natural
     totalWeight = F.sum weights
 
+-- Properties:
+--
+-- >>> sum    (partitionNaturalWithPriority n xs) == n
+-- >>> length (partitionNaturalWithPriority n xs) == length xs
+--
+-- Case #1:
+--
+-- The target value is greater than or equal to the sum of weights.
+--
+-- In this case, proportionality is maintained with all weights:
+--
+-- >>> partitionNaturalWithPriority 200 [20, 30, 50, 100] == [20,  30,  50, 100]
+-- >>> partitionNaturalWithPriority 400 [20, 30, 50, 100] == [40,  60, 100, 200]
+-- >>> partitionNaturalWithPriority 800 [20, 30, 50, 100] == [80, 120, 200, 200]
+--
+-- Case #2:
+--
+-- The target value is less than or equal to the sum of weights, but greater
+-- than or equal to the largest weight.
+--
+-- In this case, as the target weight decreases, the approximate magnitudes of
+-- the largest weights are maintained, but the smallest weights are sacrificed:
+--
+-- >>> partitionNaturalWithPriority 200 [20, 30, 50, 100] == [20, 30, 50, 100]
+-- >>> partitionNaturalWithPriority 199 [20, 30, 50, 100] == [20, 30, 50,  99]
+-- >>> ...
+-- >>> partitionNaturalWithPriority 191 [20, 30, 50, 100] == [19, 29, 48,  95]
+-- >>> partitionNaturalWithPriority 190 [20, 30, 50, 100] == [19, 28, 48,  95]
+-- >>> partitionNaturalWithPriority 189 [20, 30, 50, 100] == [ 0, 31, 53, 105]
+-- >>> partitionNaturalWithPriority 188 [20, 30, 50, 100] == [ 0, 31, 52, 105]
+-- >>> ...
+-- >>> partitionNaturalWithPriority 166 [20, 30, 50, 100] == [ 0, 28, 46,  92]
+-- >>> partitionNaturalWithPriority 165 [20, 30, 50, 100] == [ 0, 27, 46,  92]
+-- >>> partitionNaturalWithPriority 164 [20, 30, 50, 100] == [ 0,  0, 55, 109]
+-- >>> partitionNaturalWithPriority 163 [20, 30, 50, 100] == [ 0,  0, 54, 109]
+-- >>> ...
+-- >>> partitionNaturalWithPriority 126 [20, 30, 50, 100] == [ 0,  0, 42,  84]
+-- >>> partitionNaturalWithPriority 125 [20, 30, 50, 100] == [ 0,  0, 42,  83]
+-- >>> partitionNaturalWithPriority 124 [20, 30, 50, 100] == [ 0,  0,  0, 124]
+-- >>> partitionNaturalWithPriority 123 [20, 30, 50, 100] == [ 0,  0,  0, 123]
+-- >>> ...
+-- >>> partitionNaturalWithPriority 101 [20, 30, 50, 100] == [ 0,  0,  0, 101]
+-- >>> partitionNaturalWithPriority 100 [20, 30, 50, 100] == [ 0,  0,  0, 100]
+--
+-- Case #3:
+--
+-- The target value is less than or equal to the largest weight.
+--
+-- In this case, all value is assigned to the largest weight:
+--
+-- >>> partitionNaturalWithPriority 100 [20, 30, 50, 100] == [0, 0, 0, 100]
+-- >>> partitionNaturalWithPriority  80 [20, 30, 50, 100] == [0, 0, 0,  80]
+-- >>> partitionNaturalWithPriority  60 [20, 30, 50, 100] == [0, 0, 0,  60]
+-- >>> partitionNaturalWithPriority  40 [20, 30, 50, 100] == [0, 0, 0,  40]
+-- >>> partitionNaturalWithPriority  20 [20, 30, 50, 100] == [0, 0, 0,  20]
+-- >>> partitionNaturalWithPriority   0 [20, 30, 50, 100] == [0, 0, 0,   0]
+--
+partitionNaturalWithPriority
+    :: Natural
+        -- ^ Natural number to partition.
+    -> NonEmpty Natural
+        -- ^ List of weights.
+    -> Maybe (NonEmpty Natural)
+        -- ^ The partitioned result.
+partitionNaturalWithPriority target weights
+    = partitionNatural target
+    $ zeroSmallestUntilSumMinimalDistanceToTarget weights target
+
+dropUntilSumMinimalDistanceToTarget
+    :: forall a. (Num a, Ord a)
+    => NonEmpty a
+    -- ^ List from which to drop values.
+    -> a
+    -- ^ Target sum value.
+    -> NonEmpty a
+    -- ^ Suffix of original list.
+dropUntilSumMinimalDistanceToTarget as target =
+    NE.zipReversedWith
+        (curry fst)
+        (as)
+        (NE.dropWhileRetainLast (> minimumDistance) distances)
+  where
+    distances :: NonEmpty a
+    distances =
+        NE.zipWith
+            (distance)
+            (NE.withReversed cumulativeSum as)
+            (NE.repeat target)
+
+    minimumDistance :: a
+    minimumDistance = F.minimum distances
+
+zeroSmallestUntilSumMinimalDistanceToTarget
+    :: (Num a, Ord a)
+    => NonEmpty a
+    -- ^ List with values to erase.
+    -> a
+    -- ^ Target sum value.
+    -> NonEmpty a
+    -- ^ Original list with one or more values erased.
+zeroSmallestUntilSumMinimalDistanceToTarget as target =
+    NE.withSorted eraseValues as
+  where
+    eraseValues
+        = flip NE.padHeadWith (0 <$ as)
+        . flip dropUntilSumMinimalDistanceToTarget target
+
 --------------------------------------------------------------------------------
 -- Unsafe partitioning
 --------------------------------------------------------------------------------
@@ -265,6 +379,15 @@ consecutivePairs :: [a] -> [(a, a)]
 consecutivePairs xs = case tailMay xs of
     Nothing -> []
     Just ys -> xs `zip` ys
+
+cumulativeSum :: Num a => NonEmpty a -> NonEmpty a
+cumulativeSum = NE.scanl1 (+)
+
+distance :: (Num a, Ord a) => a -> a -> a
+distance a b
+    | a < b = b - a
+    | a > b = a - b
+    | otherwise = 0
 
 -- Extract the fractional part of a rational number.
 --

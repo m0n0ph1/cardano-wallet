@@ -35,6 +35,7 @@ library
       src
   exposed-modules:
       Cardano.Numeric.Util
+      Data.List.NonEmpty.Extra
 
 test-suite unit
   default-language:
