@@ -1502,7 +1502,7 @@ fixtureLegacyWallet
     -> ResourceT m ApiByronWallet
 fixtureLegacyWallet ctx style mnemonics = snd <$> allocate create free
   where
-    create = bracketProfileIO "fixtureLegacyWallet" $ do
+    create = bracketProfileIO ("fixtureLegacyWallet " <> show style) $ do
         let payload = Json [aesonQQ| {
                 "name": "Faucet Byron Wallet",
                 "mnemonic_sentence": #{mnemonics},
