@@ -129,7 +129,7 @@ import Cardano.BM.Data.SubTrace
 import Cardano.BM.Setup
     ( setupTrace_, shutdown )
 import Cardano.BM.Trace
-    ( Trace, appendName, logDebug, nullTracer, traceNamedObject )
+    ( Trace, appendName, logDebug, traceNamedObject )
 import Cardano.Mnemonic
     ( MkSomeMnemonic (..), SomeMnemonic (..) )
 import Cardano.Wallet.Api.Client
@@ -1701,7 +1701,7 @@ withLoggingNamed loggerName outputs = bracket before after
   where
     before = initTracer loggerName outputs
     after (sb, (_, tr)) = do
-        logDebug (appendName "main" nullTracer) "Logging shutdown."
+        logDebug (appendName "main" tr) "Logging shutdown."
         shutdown sb
 
 data LoggingOptions tracers = LoggingOptions
