@@ -73,9 +73,7 @@ aroundAll acquire =
 --
 -- It also has a timeout of 10 minutes.
 it :: HasCallStack => String -> ActionWith ctx -> SpecWith ctx
-it = itWithCustomTimeout (60*minutes)
-  where
-    minutes = 10
+it = Hspec.it --itWithCustomTimeout (60*minutes)
 
 -- | Like @it@ but with a custom timeout, testing of the function possible.
 itWithCustomTimeout
