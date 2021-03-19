@@ -1573,7 +1573,7 @@ newDBLayerWith cacheBehavior tr ti SqliteContext{runQuery} = do
                                      ACID Execution
         -----------------------------------------------------------------------}
 
-        , atomically = withMVar queryLock . const . runQuery
+        , atomically = runQuery
         }
 
 readWalletMetadata
