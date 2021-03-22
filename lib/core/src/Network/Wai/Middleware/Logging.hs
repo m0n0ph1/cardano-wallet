@@ -311,7 +311,7 @@ instance HasSeverityAnnotation HandlerLog where
 
 severityFromRequestTime :: NominalDiffTime -> Severity
 severityFromRequestTime t
-    t | t > 5     = Error
+      | t > 5     = Error
       | t > 1     = Warning
       | t > 0.5   = Notice
       | otherwise = Info
