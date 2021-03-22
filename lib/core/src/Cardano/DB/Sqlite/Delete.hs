@@ -234,4 +234,4 @@ waitForFree' tr pol (RefCount mvar lock) ix action = modifyMVar lock $ const $ d
 -- to 2 minutes.
 waitForFreeRetryPolicy :: RetryPolicy
 waitForFreeRetryPolicy = fibonacciBackoff 50_000 & capDelay 5_000_000
-    & limitRetriesByCumulativeDelay 120_000_000
+    & limitRetriesByCumulativeDelay 4_000_000
