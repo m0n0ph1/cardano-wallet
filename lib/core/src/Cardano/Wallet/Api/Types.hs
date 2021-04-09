@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -133,6 +134,7 @@ module Cardano.Wallet.Api.Types
     , ApiAccountKeyShared (..)
     , KeyFormat (..)
     , ApiPostAccountKeyData (..)
+    , ForgeTokenData(..)
 
     -- * API Types (Byron)
     , ApiByronWallet (..)
@@ -181,6 +183,7 @@ module Cardano.Wallet.Api.Types
     , PostTransactionFeeDataT
     , ApiWalletMigrationPlanPostDataT
     , ApiWalletMigrationPostDataT
+    , ForgeTokenDataT
 
     -- * API Type Conversions
     , coinToQuantity
@@ -200,11 +203,14 @@ import Cardano.Address.Derivation
 import Cardano.Address.Script
     ( Cosigner (..), KeyHash, Script, ScriptTemplate, ValidationLevel (..) )
 import Cardano.Api
-    ( TxMetadataJsonSchema (..)
+    ( AssetName
+    , TxMetadataJsonSchema (..)
     , displayError
     , metadataFromJson
     , metadataToJson
     )
+import qualified Cardano.Api as Cardano
+    ( Quantity )
 import Cardano.Mnemonic
     ( MkSomeMnemonic (..)
     , MkSomeMnemonicError (..)
@@ -367,6 +373,8 @@ import GHC.TypeLits
     ( Nat, Symbol )
 import Numeric.Natural
     ( Natural )
+import Quiet
+    ( Quiet (..) )
 import Servant.API
     ( MimeRender (..), MimeUnrender (..), OctetStream )
 import Web.HttpApiData
@@ -2834,6 +2842,7 @@ type family ApiCoinSelectionT (n :: k) :: Type
 type family ApiSelectCoinsDataT (n :: k) :: Type
 type family ApiTransactionT (n :: k) :: Type
 type family PostTransactionDataT (n :: k) :: Type
+type family ForgeTokenDataT (n :: k) :: Type
 type family PostTransactionFeeDataT (n :: k) :: Type
 type family ApiWalletMigrationPlanPostDataT (n :: k) :: Type
 type family ApiWalletMigrationPostDataT (n :: k1) (s :: k2) :: Type
@@ -2859,6 +2868,9 @@ type instance ApiTransactionT (n :: NetworkDiscriminant) =
 
 type instance PostTransactionDataT (n :: NetworkDiscriminant) =
     PostTransactionData n
+
+type instance ForgeTokenDataT (n :: NetworkDiscriminant) =
+  ForgeTokenData n
 
 type instance PostTransactionFeeDataT (n :: NetworkDiscriminant) =
     PostTransactionFeeData n
@@ -2911,3 +2923,23 @@ instance FromJSON (ApiT SmashServer) where
     parseJSON = fromTextJSON "SmashServer"
 instance ToJSON (ApiT SmashServer) where
     toJSON = toTextJSON
+
+{-------------------------------------------------------------------------------
+                         Token forging types
+-------------------------------------------------------------------------------}
+
+data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
+    { address :: !(ApiT Address, Proxy n)
+    , assetName :: !(ApiT W.TokenName)
+    , mintAmount :: !(Quantity "assets" Natural)
+    , monetaryPolicyIndex :: !(Maybe (ApiT DerivationIndex))
+    , passphrase :: !(ApiT (Passphrase "lenient"))
+    , metadata :: !(Maybe (ApiT TxMetadata))
+    , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
+    } deriving (Eq, Generic, Show)
+
+instance DecodeAddress n => FromJSON (ForgeTokenData n) where
+    parseJSON = genericParseJSON defaultRecordTypeOptions
+
+instance EncodeAddress n => ToJSON (ForgeTokenData n) where
+    toJSON = genericToJSON defaultRecordTypeOptions

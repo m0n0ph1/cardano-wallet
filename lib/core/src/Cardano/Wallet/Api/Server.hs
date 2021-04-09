@@ -85,6 +85,7 @@ module Cardano.Wallet.Api.Server
     , postSharedWallet
     , patchSharedWallet
     , mkSharedWallet
+    , forgeToken
 
     -- * Server error responses
     , IsServerError(..)
@@ -113,9 +114,19 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
 import Cardano.Address.Script
-    ( Cosigner (..), ScriptTemplate (..) )
+    ( Cosigner (..)
+    , KeyHash
+    , KeyRole
+    , Script (RequireSignatureOf)
+    , ScriptTemplate (..)
+    )
+import qualified Cardano.Address.Script as CA
 import Cardano.Api
-    ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..) )
+    ( AnyCardanoEra (..)
+    , AssetName (AssetName)
+    , CardanoEra (..)
+    , SerialiseAsCBOR (..)
+    )
 import Cardano.BM.Tracing
     ( HasPrivacyAnnotation (..), HasSeverityAnnotation (..) )
 import Cardano.Mnemonic
@@ -266,6 +277,8 @@ import Cardano.Wallet.Compat
     ( (^?) )
 import Cardano.Wallet.DB
     ( DBFactory (..) )
+import Cardano.Wallet.DB.Sqlite.Types
+    ()
 import Cardano.Wallet.Network
     ( NetworkLayer, timeInterpreter )
 import Cardano.Wallet.Primitive.AddressDerivation
@@ -280,11 +293,13 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Passphrase (..)
     , PaymentAddress (..)
     , RewardAccount (..)
-    , Role
+    , Role (MultisigScript)
     , SoftDerivation (..)
     , WalletKey (..)
     , deriveRewardAccount
+    , deriveVerificationKey
     , digest
+    , hashVerificationKey
     , preparePassphrase
     , publicKey
     )
@@ -305,6 +320,8 @@ import Cardano.Wallet.Primitive.AddressDiscovery
     )
 import Cardano.Wallet.Primitive.AddressDiscovery.Random
     ( RndState, mkRndState )
+import Cardano.Wallet.Primitive.AddressDiscovery.Script
+    ( keyHashFromAccXPubIx )
 import Cardano.Wallet.Primitive.AddressDiscovery.Sequential
     ( DerivationPrefix (..)
     , ParentContext (..)
@@ -327,8 +344,10 @@ import Cardano.Wallet.Primitive.AddressDiscovery.Shared
     , walletCreationInvariant
     )
 import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
-    ( SelectionError (..)
-    , SelectionResult (..)
+    ( SelectionCriteria (..)
+    , SelectionError (..)
+    , SelectionInsufficientError (..)
+    , SelectionResult (outputsCovered)
     , UnableToConstructChangeError (..)
     , balanceMissing
     , selectionDelta
@@ -379,8 +398,15 @@ import Cardano.Wallet.Primitive.Types.TokenBundle
     ( Flat (..), TokenBundle (..) )
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
+import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..), TokenPolicyId (..), nullTokenName )
+    ( TokenName (..)
+    , TokenPolicyId (..)
+    , nullTokenName
+    , tokenPolicyIdFromScript
+    )
+import Cardano.Wallet.Primitive.Types.TokenQuantity
+    ( TokenQuantity (TokenQuantity) )
 import Cardano.Wallet.Primitive.Types.Tx
     ( TransactionInfo (TransactionInfo)
     , Tx (..)
@@ -464,6 +490,8 @@ import Data.Set
     ( Set )
 import Data.Streaming.Network
     ( HostPreference, bindPortTCP, bindRandomPortTCP )
+import Data.String
+    ( fromString )
 import Data.Text
     ( Text )
 import Data.Text.Class
@@ -530,6 +558,7 @@ import UnliftIO.Concurrent
 import UnliftIO.Exception
     ( IOException, bracket, throwIO, tryAnyDeep, tryJust )
 
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet as W
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Network as NW
@@ -1756,7 +1785,7 @@ postTransaction ctx genChange (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)
@@ -1916,7 +1945,7 @@ joinStakePool ctx knownPools getPoolStatus apiPoolId (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -2001,7 +2030,7 @@ quitStakePool ctx (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -2643,6 +2672,15 @@ addressAmountToTxOut
     -> TxOut
 addressAmountToTxOut (AddressAmount (ApiT addr, _) c (ApiT assets)) =
     TxOut addr (TokenBundle.TokenBundle (coinFromQuantity c) assets)
+
+-- addressForgeAmountToTxOut
+--     :: forall (n :: NetworkDiscriminant). AddressForgeAmount (ApiT Address, Proxy n)
+--     -> TxOut
+-- addressForgeAmountToTxOut (AddressForgeAmount (ApiT addr, _) forgeAmt) =
+--   let
+--     assets = Api.mintAmount forgeAmt
+--   in
+--     TxOut addr (TokenBundle.TokenBundle mempty assets)
 
 natural :: Quantity q Word32 -> Quantity q Natural
 natural = Quantity . fromIntegral . getQuantity
@@ -3498,3 +3536,114 @@ instance HasSeverityAnnotation WalletEngineLog where
     getSeverityAnnotation = \case
         MsgWalletWorker msg -> getSeverityAnnotation msg
         MsgSubmitSealedTx msg -> getSeverityAnnotation msg
+
+forgeToken
+    :: forall ctx s k n.
+        ( ctx ~ ApiLayer s k
+        , s ~ SeqState n k
+        , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
+        , AddressIndexDerivationType k ~ 'Soft
+        , WalletKey k
+        , GenChange s
+        , HardDerivation k
+        , SoftDerivation k
+        , HasNetworkLayer IO ctx
+        , IsOwned s k
+        , Typeable n
+        , Typeable s
+        , PaymentAddress n k
+        , CompareDiscovery s
+        , KnownAddresses s
+        )
+    => ctx
+    -> ArgGenChange s
+    -> ApiT WalletId
+    -> Api.ForgeTokenData n
+    -> Handler (ApiTransaction n)
+forgeToken ctx genChange (ApiT wid) body = do
+    let pwd = coerce $ body ^. #passphrase . #getApiT
+    let assetName = body ^. #assetName . #getApiT
+    let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
+    let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyIndex
+    let md = body ^? #metadata . traverse . #getApiT
+    let mTTL = body ^? #timeToLive . traverse . #getQuantity
+    let (ApiT addr, _) = body ^. #address
+
+    (wdrl, mkRwdAcct) <-
+        mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
+
+    ttl <- liftIO $ W.getTxExpiry ti mTTL
+
+    (sel, tx, txMeta, txTime) <- withWorkerCtx ctx wid liftE liftE $ \wrk -> do
+        -- In the HD-wallet, monetary policies are associated with
+        -- address indices under the account type "3" (MultiSigScript).
+        -- Each address index stores the key associated with a single
+        -- monetary policy.
+        --
+        -- e.g. m/1852(purpose)​/​1815(coin_type)/0(account)​/3/0 -> monetary policy 1
+        --      m/1852(purpose)​/​1815(coin_type)/0(account)​/3/1 -> monetary policy 2
+
+        -- Derive a signing key for the monetary policy
+        policyKey <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (MultisigScript, derivationIndex)
+
+        let
+          scriptXPub = publicKey $ fst policyKey
+
+          vkeyHash :: KeyHash
+          vkeyHash = hashVerificationKey @k MultisigScript $ liftRawKey $ getRawKey scriptXPub
+
+          script :: Script KeyHash
+          script = RequireSignatureOf vkeyHash
+
+          policyId :: TokenPolicyId
+          policyId = tokenPolicyIdFromScript script
+
+          assetId :: AssetId
+          assetId = AssetId policyId assetName
+
+        -- Transfer the minted assets to the payment address
+        -- associated with the monetary policy
+        let assets = TokenMap.singleton assetId assetQty
+        let txout = (TxOut addr (TokenBundle.TokenBundle (Coin 0) assets)) NE.:| []
+        -- let outs = fmap (\(TxOut addr (TokenBundle.TokenBundle coin tokens)) -> TxOut addr (TokenBundle.TokenBundle coin mempty)) (pure txout)
+
+        let txCtx = defaultTransactionCtx
+                { txWithdrawal = wdrl
+                , txMetadata = md
+                , txTimeToLive = ttl
+                , txMintBurnInfo = Just (pure (addr, assets) :: NonEmpty (Address, TokenMap.TokenMap))
+                }
+
+        w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
+        -- liftIO $ putStrLn $ "Starting SEL..."
+        sel <- liftHandler
+            $ W.selectAssets @_ @s @k wrk w txCtx txout (const Prelude.id)
+        -- liftIO $ putStrLn $ "Finished SEL"
+        -- liftIO $ putStrLn $ show sel
+
+        -- let outputsCovered' = fmap (\txout -> case txout of
+        --          (TxOut addr (TokenBundle.TokenBundle coin tokens)) | addr == payAddrXPub && tokens == mempty -> TxOut addr (TokenBundle.TokenBundle coin (TokenMap.singleton assetId assetQty))
+        --          otherwise -> txout
+        --          ) (outputsCovered sel)
+
+        (tx, txMeta, txTime, sealedTx) <- liftHandler
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just policyKey)
+        -- liftIO $ putStrLn $ "Finished SIGN"
+        -- liftIO $ putStrLn $ show tx
+        liftHandler
+            $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
+        pure (sel, tx, txMeta, txTime)
+
+    liftIO $ mkApiTransaction
+        (timeInterpreter $ ctx ^. networkLayer)
+        (txId tx)
+        (tx ^. #fee)
+        (NE.toList $ second Just <$> sel ^. #inputsSelected)
+        (tx ^. #outputs)
+        (tx ^. #withdrawals)
+        (txMeta, txTime)
+        (tx ^. #metadata)
+        #pendingSince
+  where
+    ti :: TimeInterpreter (ExceptT PastHorizonException IO)
+    ti = timeInterpreter (ctx ^. networkLayer)

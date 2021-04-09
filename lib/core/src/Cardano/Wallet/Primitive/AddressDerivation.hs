@@ -29,6 +29,7 @@
 --  * "Cardano.Wallet.Primitive.AddressDerivation.Shelley"
 --  * "Cardano.Wallet.Primitive.AddressDerivation.Byron"
 
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Cardano.Wallet.Primitive.AddressDerivation
     (
     -- * HD Derivation

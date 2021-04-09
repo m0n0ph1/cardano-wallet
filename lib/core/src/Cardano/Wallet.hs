@@ -80,6 +80,8 @@ module Cardano.Wallet
     , readRewardAccount
     , someRewardAccount
     , queryRewardBalance
+    , guardSoftIndex
+    , guardHardIndex
     , ErrWalletAlreadyExists (..)
     , ErrNoSuchWallet (..)
     , ErrListUTxOStatistics (..)
@@ -165,6 +167,7 @@ module Cardano.Wallet
     -- ** Root Key
     , withRootKey
     , derivePublicKey
+    , derivePrivateKey
     , readPublicAccountKey
     , signMetadataWith
     , ErrWithRootKey (..)
@@ -1490,8 +1493,9 @@ signTransaction
     -> Passphrase "raw"
     -> TransactionCtx
     -> SelectionResult TxOut
+    -> Maybe (k 'ScriptK XPrv, Passphrase "encryption")
     -> ExceptT ErrSignPayment IO (Tx, TxMeta, UTCTime, SealedTx)
-signTransaction ctx wid mkRwdAcct pwd txCtx sel =
+signTransaction ctx wid mkRwdAcct pwd txCtx sel extraWit =
     db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
     withRootKey @_ @s ctx wid pwd ErrSignPaymentWithRootKey $ \xprv scheme -> do
@@ -1504,7 +1508,7 @@ signTransaction ctx wid mkRwdAcct pwd txCtx sel =
             let keyFrom = isOwned (getState cp) (xprv, pwdP)
             let rewardAcnt = mkRwdAcct (xprv, pwdP)
             (tx, sealedTx) <- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
-                mkTransaction tl era rewardAcnt keyFrom pp txCtx sel
+                mkTransaction tl era rewardAcnt keyFrom pp txCtx sel extraWit
             (time, meta) <- liftIO $
                 mkTxMeta ti (currentTip cp) (getState cp) txCtx sel
             return (tx, meta, time, sealedTx)
@@ -2259,6 +2263,37 @@ derivePublicKey ctx wid role_ ix = db & \DBLayer{..} -> do
     let addrK = deriveAddressPublicKey acctK role_ addrIx
 
     return addrK
+  where
+    db = ctx ^. dbLayer @IO @s @k
+
+derivePrivateKey
+    :: forall ctx s k n.
+        ( HasDBLayer IO s k ctx
+        , HardDerivation k
+        , AddressIndexDerivationType k ~ 'Soft
+        , s ~ SeqState n k
+        , WalletKey k
+        )
+    => ctx
+    -> WalletId
+    -> Passphrase "raw"
+    -> (Role, DerivationIndex)
+    -> ExceptT ErrSignMetadataWith IO (k 'ScriptK XPrv, Passphrase "encryption")
+derivePrivateKey ctx wid pwd (role_, ix) = db & \DBLayer{..} -> do
+    addrIx <- withExceptT ErrSignMetadataWithInvalidIndex $ guardSoftIndex ix
+
+    cp <- mapExceptT atomically
+        $ withExceptT ErrSignMetadataWithNoSuchWallet
+        $ withNoSuchWallet wid
+        $ readCheckpoint wid
+
+    withRootKey @ctx @s @k ctx wid pwd ErrSignMetadataWithRootKey
+        $ \rootK scheme -> do
+            let encPwd = preparePassphrase scheme pwd
+            let DerivationPrefix (_, _, acctIx) = derivationPrefix (getState cp)
+            let acctK = deriveAccountPrivateKey encPwd rootK acctIx
+            let addrK = deriveAddressPrivateKey encPwd acctK role_ addrIx
+            pure (liftRawKey . getRawKey $ addrK, encPwd)
   where
     db = ctx ^. dbLayer @IO @s @k
 

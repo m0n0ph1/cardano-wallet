@@ -133,6 +133,9 @@ module Cardano.Wallet.Api
     , Proxy_
         , PostExternalTransaction
 
+    , Tokens
+      , ForgeToken
+
       -- * Api Layer
     , ApiLayer (..)
     , HasWorkerRegistry
@@ -187,6 +190,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
+    , ForgeTokenDataT
     , Iso8601Time
     , MinWithdrawal
     , PostExternalTransactionData
@@ -292,6 +296,7 @@ type Api n apiPool =
     :<|> SharedWallets
     :<|> SharedWalletKeys
     :<|> SharedAddresses n
+    :<|> Tokens n
 
 {-------------------------------------------------------------------------------
                                   Wallets
@@ -905,7 +910,7 @@ type DeleteSharedWallet = "shared-wallets"
     :> DeleteNoContent
 
 {-------------------------------------------------------------------------------
-                                  Shared Wallet Keys
+                                 Shared Wallet Keys
   See also: https://input-output-hk.github.io/cardano-wallet/api/#tag/Keys
 -------------------------------------------------------------------------------}
 
@@ -945,6 +950,20 @@ type ListSharedAddresses n = "shared-wallets"
     :> "addresses"
     :> QueryParam "state" (ApiT AddressState)
     :> Get '[JSON] [ApiAddressT n]
+
+{-------------------------------------------------------------------------------
+                                  Tokens
+
+  See also: https://input-output-hk.github.io/cardano-wallet/api/edge/#tag/Forge
+-------------------------------------------------------------------------------}
+
+type Tokens n = ForgeToken n
+
+type ForgeToken n = "wallets"
+    :> Capture "walletId" (ApiT WalletId)
+    :> "forge"
+    :> ReqBody '[JSON] (ForgeTokenDataT n)
+    :> PostAccepted '[JSON] (ApiTransactionT n)
 
 {-------------------------------------------------------------------------------
                                    Proxy_
