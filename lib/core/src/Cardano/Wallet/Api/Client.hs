@@ -79,9 +79,9 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ByronWalletPutPassphraseData (..)
     , Iso8601Time (..)
-    , PostExternalTransactionData (..)
-    , PostTransactionDataT
-    , PostTransactionFeeDataT
+    , PostSignTransactionData
+    , PostTransactionFeeOldDataT
+    , PostTransactionOldDataT
     , WalletPutData (..)
     , WalletPutPassphraseData (..)
     )
@@ -91,6 +91,8 @@ import Cardano.Wallet.Primitive.Types.Address
     ( AddressState )
 import Cardano.Wallet.Primitive.Types.Coin
     ( Coin (..) )
+import Cardano.Wallet.Primitive.Types.Tx
+    ( SerialisedTx, SerialisedTxParts )
 import Control.Monad
     ( void )
 import Data.Coerce
@@ -150,16 +152,24 @@ data TransactionClient = TransactionClient
         -> Maybe Iso8601Time
         -> Maybe (ApiT SortOrder)
         -> ClientM [ApiTransactionT Aeson.Value]
+    , postSignTransaction
+        :: ApiT WalletId
+        -> PostSignTransactionData
+        -> ClientM (ApiT SerialisedTx)
+    , postSignTransactionParts
+        :: ApiT WalletId
+        -> PostSignTransactionData
+        -> ClientM (ApiT SerialisedTxParts)
     , postTransaction
         :: ApiT WalletId
-        -> PostTransactionDataT Aeson.Value
+        -> PostTransactionOldDataT Aeson.Value
         -> ClientM (ApiTransactionT Aeson.Value)
     , postTransactionFee
         :: ApiT WalletId
-        -> PostTransactionFeeDataT Aeson.Value
+        -> PostTransactionFeeOldDataT Aeson.Value
         -> ClientM ApiFee
     , postExternalTransaction
-        :: PostExternalTransactionData
+        :: ApiT SerialisedTx
         -> ClientM ApiTxId
     , deleteTransaction
         :: ApiT WalletId
@@ -273,18 +283,26 @@ transactionClient
     :: TransactionClient
 transactionClient =
     let
-        _postTransaction
+        _postSignTransactions
+            :<|> _postTransaction
             :<|> _listTransactions
             :<|> _postTransactionFee
             :<|> _deleteTransaction
             :<|> _getTransaction
             = client (Proxy @("v2" :> (Transactions Aeson.Value)))
 
+        _postSignTransaction wid p = ep
+            where ep :<|> _ = _postSignTransactions wid p
+        _postSignTransactionParts wid p = ep
+            where _ :<|> ep = _postSignTransactions wid p
+
         _postExternalTransaction
             = client (Proxy @("v2" :> Proxy_))
     in
         TransactionClient
             { listTransactions = (`_listTransactions` Nothing)
+            , postSignTransaction = _postSignTransaction
+            , postSignTransactionParts = _postSignTransactionParts
             , postTransaction = _postTransaction
             , postTransactionFee = _postTransactionFee
             , postExternalTransaction = _postExternalTransaction
@@ -297,18 +315,26 @@ byronTransactionClient
     :: TransactionClient
 byronTransactionClient =
     let
-        _postTransaction
+        _postSignTransactions
+            :<|> _postTransaction
             :<|> _listTransactions
             :<|> _postTransactionFee
             :<|> _deleteTransaction
             :<|> _getTransaction
             = client (Proxy @("v2" :> (ByronTransactions Aeson.Value)))
 
+        _postSignTransaction wid p = ep
+            where ep :<|> _ = _postSignTransactions wid p
+        _postSignTransactionParts wid p = ep
+            where _ :<|> ep = _postSignTransactions wid p
+
         _postExternalTransaction
             = client (Proxy @("v2" :> Proxy_))
 
     in TransactionClient
         { listTransactions = _listTransactions
+        , postSignTransaction = _postSignTransaction
+        , postSignTransactionParts = _postSignTransactionParts
         , postTransaction = _postTransaction
         , postTransactionFee = _postTransactionFee
         , postExternalTransaction = _postExternalTransaction
@@ -407,6 +433,6 @@ type instance ApiAddressIdT Aeson.Value = Text
 type instance ApiCoinSelectionT Aeson.Value = Aeson.Value
 type instance ApiSelectCoinsDataT Aeson.Value = Aeson.Value
 type instance ApiTransactionT Aeson.Value = Aeson.Value
-type instance PostTransactionDataT Aeson.Value = Aeson.Value
-type instance PostTransactionFeeDataT Aeson.Value = Aeson.Value
+type instance PostTransactionOldDataT Aeson.Value = Aeson.Value
+type instance PostTransactionFeeOldDataT Aeson.Value = Aeson.Value
 type instance ApiPutAddressesDataT Aeson.Value = Aeson.Value

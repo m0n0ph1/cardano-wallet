@@ -68,9 +68,9 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
-    , PostExternalTransactionData
-    , PostTransactionData
-    , PostTransactionFeeData
+    , PostSignTransactionData
+    , PostTransactionFeeOldData
+    , PostTransactionOldData
     , SettingsPutData (..)
     , SomeByronWalletPostData
     , WalletOrAccountPostData
@@ -85,6 +85,8 @@ import Cardano.Wallet.Primitive.Types.Address
     ( Address (..) )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenName, TokenPolicyId )
+import Cardano.Wallet.Primitive.Types.Tx
+    ( SerialisedTx )
 import Control.Arrow
     ( first )
 import Data.Aeson.QQ
@@ -1157,12 +1159,44 @@ instance Malformed (BodyParam (ApiSelectCoinsData ('Testnet pm))) where
               )
             ]
 
-instance Malformed (BodyParam (PostTransactionData ('Testnet pm))) where
+instance Malformed (BodyParam PostSignTransactionData) where
     malformed = jsonValid ++ jsonInvalid
      where
          jsonInvalid = first BodyParam <$>
-            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionData(PostTransactionData) failed, expected Object, but encountered Number")
-            , ("\"1020344\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionData(PostTransactionData) failed, expected Object, but encountered String")
+            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed")
+            , ("\"hello\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed, expected Object, but encountered String")
+            , ("{\"tx\": \"\", \"random\"}", msgJsonInvalid)
+            , ("{\"tx\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "fixme")
+            , ("{\"tx\": 1020344, \"passphase\": \"Secure Passphrase\"}", "fixme")
+            , ("{\"tx\": { \"body\", 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
+            ]
+         jsonValid = first (BodyParam . Aeson.encode) <$> paymentCases ++
+            [ -- passphrase
+              ( [aesonQQ|
+                { "tx": "cafecafe"
+                }|]
+              , "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData(PostSignTransactionData) failed, key 'passphrase' not found"
+              )
+            , ( [aesonQQ|
+               { "tx": "cafecafe",
+                  "passphrase": #{nameTooLong}
+               }|]
+               , "Error in $.passphrase: passphrase is too long: expected at most 255 characters"
+              )
+            , ( [aesonQQ|
+               { "tx": { "witnesses": [] },
+                  "passphrase": #{wPassphrase}
+               }|]
+               , "Error in $: key 'body' not found"
+              )
+            ]
+
+instance Malformed (BodyParam (PostTransactionOldData ('Testnet pm))) where
+    malformed = jsonValid ++ jsonInvalid
+     where
+         jsonInvalid = first BodyParam <$>
+            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionOldData(PostTransactionOldData) failed, expected Object, but encountered Number")
+            , ("\"1020344\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionOldData(PostTransactionOldData) failed, expected Object, but encountered String")
             , ("{\"payments : [], \"random\"}", msgJsonInvalid)
             ]
          jsonValid = first (BodyParam . Aeson.encode) <$> paymentCases ++
@@ -1178,7 +1212,7 @@ instance Malformed (BodyParam (PostTransactionData ('Testnet pm))) where
                     }
                    ]
                 }|]
-              , "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionData(PostTransactionData) failed, key 'passphrase' not found"
+              , "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionOldData(PostTransactionOldData) failed, key 'passphrase' not found"
               )
             , ( [aesonQQ|
                { "payments": [
@@ -1196,12 +1230,12 @@ instance Malformed (BodyParam (PostTransactionData ('Testnet pm))) where
               )
             ]
 
-instance Malformed (BodyParam (PostTransactionFeeData ('Testnet pm))) where
+instance Malformed (BodyParam (PostTransactionFeeOldData ('Testnet pm))) where
     malformed = jsonValid ++ jsonInvalid
      where
          jsonInvalid = first BodyParam <$>
-            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionFeeData(PostTransactionFeeData) failed, expected Object, but encountered Number")
-            , ("\"1020344\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionFeeData(PostTransactionFeeData) failed, expected Object, but encountered String")
+            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionFeeOldData(PostTransactionFeeOldData) failed, expected Object, but encountered Number")
+            , ("\"1020344\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostTransactionFeeOldData(PostTransactionFeeOldData) failed, expected Object, but encountered String")
             , ("{\"payments : [], \"random\"}", msgJsonInvalid)
             , ("\"slot_number : \"random\"}", "trailing junk after valid JSON: endOfInput")
             ]
@@ -1297,7 +1331,7 @@ instance Malformed (BodyParam ApiSlotReference) where
               )
             ]
 
-instance Malformed (BodyParam PostExternalTransactionData)
+instance Malformed (BodyParam (ApiT SerialisedTx))
 -- no cases here as all bad requests are served by ErrDecodeSignedTxWrongPayload
 -- in Server.hs. Tested by integration tests.
 

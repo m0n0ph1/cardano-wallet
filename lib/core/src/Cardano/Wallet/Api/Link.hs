@@ -526,8 +526,8 @@ createTransaction
     => w
     -> (Method, Text)
 createTransaction w = discriminate @style
-    (endpoint @(Api.CreateTransaction Net) (wid &))
-    (endpoint @(Api.CreateByronTransaction Net) (wid &))
+    (endpoint @(Api.CreateTransactionOld Net) (wid &))
+    (endpoint @(Api.CreateByronTransactionOld Net) (wid &))
     (notSupported "Shared")
   where
     wid = w ^. typed @(ApiT WalletId)
@@ -572,8 +572,8 @@ getTransactionFee
     => w
     -> (Method, Text)
 getTransactionFee w = discriminate @style
-    (endpoint @(Api.PostTransactionFee Net) (wid &))
-    (endpoint @(Api.PostByronTransactionFee Net) (wid &))
+    (endpoint @(Api.PostTransactionFeeOld Net) (wid &))
+    (endpoint @(Api.PostByronTransactionFeeOld Net) (wid &))
     (notSupported "Shared")
   where
     wid = w ^. typed @(ApiT WalletId)
