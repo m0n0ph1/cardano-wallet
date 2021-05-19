@@ -69,7 +69,7 @@ module Cardano.Wallet.Api.Types
     , ApiCoinSelectionInput (..)
     , ApiCoinSelectionOutput (..)
     , ApiCoinSelectionWithdrawal (..)
-    , ApiRawMetadata (..)
+    , ApiBase64
     , ApiStakePool (..)
     , ApiStakePoolMetrics (..)
     , ApiStakePoolFlag (..)
@@ -88,6 +88,8 @@ module Cardano.Wallet.Api.Types
     , PostTransactionOldData (..)
     , PostTransactionFeeOldData (..)
     , ApiSerialisedTransaction (..)
+    , ApiSerialisedTransactionParts (..)
+    , ApiSignedTransaction (..)
     , ApiTransaction (..)
     , ApiWithdrawalPostData (..)
     , ApiMaintenanceAction (..)
@@ -170,6 +172,7 @@ module Cardano.Wallet.Api.Types
     -- * Polymorphic Types
     , ApiT (..)
     , ApiMnemonicT (..)
+    , ApiBytesT (..)
 
     -- * Type families
     , ApiAddressT
@@ -192,6 +195,9 @@ module Cardano.Wallet.Api.Types
     , HealthStatusSMASH (..)
     , HealthCheckSMASH (..)
     , ApiHealthCheck (..)
+
+    -- * Re-exports
+    , Base (Base16, Base64)
     ) where
 
 import Prelude
@@ -265,7 +271,6 @@ import Cardano.Wallet.Primitive.Types.Hash
 import Cardano.Wallet.Primitive.Types.Tx
     ( Direction (..)
     , SerialisedTx (..)
-    , SerialisedTxParts (..)
     , TxIn (..)
     , TxMetadata
     , TxStatus (..)
@@ -313,8 +318,10 @@ import Data.Aeson.Types
     )
 import Data.Bifunctor
     ( bimap, first )
+import Data.ByteArray
+    ( ByteArray, ByteArrayAccess )
 import Data.ByteArray.Encoding
-    ( Base (Base16, Base64), convertFromBase, convertToBase )
+    ( Base (..), convertFromBase, convertToBase )
 import Data.ByteString
     ( ByteString )
 import Data.Data
@@ -362,7 +369,7 @@ import Data.Time.Text
 import Data.Traversable
     ( for )
 import Data.Typeable
-    ( Typeable )
+    ( Typeable, typeRep )
 import Data.Word
     ( Word16, Word32, Word64 )
 import Data.Word.Odd
@@ -604,11 +611,6 @@ data ApiDelegationAction = Join (ApiT PoolId) | Quit
     deriving (Eq, Generic, Show)
     deriving anyclass NFData
 
-newtype ApiRawMetadata =
-    ApiRawMetadata { unApiRawMetadata :: ByteString }
-    deriving (Eq, Generic, Show)
-    deriving anyclass NFData
-
 data ApiCoinSelection (n :: NetworkDiscriminant) = ApiCoinSelection
     { inputs :: !(NonEmpty (ApiCoinSelectionInput n))
     , outputs :: ![ApiCoinSelectionOutput n]
@@ -616,7 +618,7 @@ data ApiCoinSelection (n :: NetworkDiscriminant) = ApiCoinSelection
     , withdrawals :: ![ApiCoinSelectionWithdrawal n]
     , certificates :: Maybe (NonEmpty ApiCertificate)
     , deposits :: ![Quantity "lovelace" Natural]
-    , metadata :: !(Maybe ApiRawMetadata)
+    , metadata :: !(Maybe ApiBase64)
     } deriving (Eq, Generic, Show)
       deriving anyclass NFData
 
@@ -829,10 +831,23 @@ data PostTransactionFeeOldData (n :: NetworkDiscriminant) = PostTransactionFeeOl
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
     } deriving (Eq, Generic, Show)
 
+type ApiBase64 = ApiBytesT 'Base64 ByteString
+
 data ApiSerialisedTransaction
-    = ApiSerialisedTransaction !(ApiT SerialisedTx)
-    | ApiSerialisedTransactionParts !(ApiT SerialisedTxParts)
+    = ApiSerialisedTransaction (ApiBytesT 'Base64 SerialisedTx)
+    | ApiSerialisedTransactionParts ApiSerialisedTransactionParts
     deriving (Eq, Generic, Show)
+
+data ApiSerialisedTransactionParts = ApiSerialisedTransactionParts'
+    { body :: ApiBase64
+    , witnesses :: [ApiBase64]
+    } deriving (Eq, Generic, Show)
+
+data ApiSignedTransaction = ApiSignedTransaction
+    { payload :: ApiBase64
+    , body :: ApiBase64
+    , witnesses :: [ApiBase64]
+    } deriving (Eq, Generic, Show)
 
 data ApiFee = ApiFee
     { estimatedMin :: !(Quantity "lovelace" Natural)
@@ -1476,6 +1491,13 @@ newtype ApiMnemonicT (sizes :: [Nat]) =
     ApiMnemonicT { getApiMnemonicT :: SomeMnemonic }
     deriving (Generic, Show, Eq)
 
+-- | Polymorphic wrapper for byte arrays, parameterised by the desired string
+-- encoding.
+newtype ApiBytesT (base :: Base) bs = ApiBytesT { getApiBytesT :: bs }
+    deriving (Generic, Show, Eq, Functor)
+    deriving newtype (Semigroup, Monoid, Hashable)
+    deriving anyclass NFData
+
 {-------------------------------------------------------------------------------
                                JSON Instances
 -------------------------------------------------------------------------------}
@@ -1813,11 +1835,6 @@ instance DecodeStakeAddress n => FromJSON (ApiCoinSelectionWithdrawal n) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
 instance EncodeStakeAddress n => ToJSON (ApiCoinSelectionWithdrawal n) where
     toJSON = genericToJSON defaultRecordTypeOptions
-
-instance FromJSON ApiRawMetadata where
-    parseJSON = fmap ApiRawMetadata . parseBase64Text
-instance ToJSON ApiRawMetadata where
-    toJSON = toJSONBase64 . unApiRawMetadata
 
 instance {-# OVERLAPS #-} DecodeAddress n => FromJSON (ApiT Address, Proxy n)
   where
@@ -2247,6 +2264,23 @@ instance ToJSON (ApiT BoundType) where
 instance FromJSON (ApiT BoundType) where
     parseJSON = fmap ApiT . genericParseJSON defaultSumTypeOptions
 
+{-
+ToJSON/FromJSON instances
+parseJSONBytes :: ByteArray bs => Base -> Value -> Aeson.Parser bs
+parseJSONBytes base = withText (show base ++ " ByteString") $
+    eitherToParser . convertFromBase base . T.encodeUtf8
+
+toJSONBytes :: ByteArrayAccess bs => Base -> bs -> Value
+toJSONBytes base = String . T.decodeLatin1 . convertToBase base
+-}
+
+instance (HasBase base, ByteArray bs) => FromJSON (ApiBytesT base bs) where
+    parseJSON = withText (show (typeRep (Proxy @base)) ++ " ByteString") $
+        eitherToParser . first ShowFmt . fromText @(ApiBytesT base bs)
+
+instance (HasBase base, ByteArrayAccess bs) => ToJSON (ApiBytesT base bs) where
+    toJSON = String . toText @(ApiBytesT base bs)
+
 instance FromJSON ApiSerialisedTransaction where
     parseJSON v = (ApiSerialisedTransaction <$> parseJSON v)
         <|> (ApiSerialisedTransactionParts <$> parseJSON v)
@@ -2255,22 +2289,21 @@ instance ToJSON ApiSerialisedTransaction where
     toJSON (ApiSerialisedTransaction tx) = toJSON tx
     toJSON (ApiSerialisedTransactionParts txParts) = toJSON txParts
 
-instance FromJSON (ApiT SerialisedTx) where
-    parseJSON = fmap (ApiT . SerialisedTx) . parseBase64Text
-instance ToJSON (ApiT SerialisedTx) where
-    toJSON = toJSONBase64 . view #payload . getApiT
-
-instance FromJSON (ApiT SerialisedTxParts) where
-    parseJSON = withObject "SerialisedTxParts" $ \o -> ApiT <$>
-        (SerialisedTxParts
-            <$> (o .: "body" >>= parseBase64Text)
-            <*> (o .:? "witnesses" .!= [] >>= mapM (parseBase64Text)))
-
-instance ToJSON (ApiT SerialisedTxParts) where
-    toJSON (ApiT (SerialisedTxParts b ws)) = object
-        [ "body" .= toJSONBase64 b
-        , "witnesses" .= map toJSONBase64 ws
+instance FromJSON ApiSerialisedTransactionParts where
+    parseJSON = withObject "ApiSerialisedTransactionParts" $ \o ->
+        ApiSerialisedTransactionParts'
+            <$> (o .: "body" >>= parseJSON)
+            <*> (o .:? "witnesses" .!= [] >>= mapM parseJSON)
+instance ToJSON ApiSerialisedTransactionParts where
+    toJSON (ApiSerialisedTransactionParts' b ws) = object
+        [ "body" .= b
+        , "witnesses" .= ws
         ]
+
+instance FromJSON ApiSignedTransaction where
+    parseJSON = genericParseJSON defaultRecordTypeOptions
+instance ToJSON ApiSignedTransaction where
+    toJSON = genericToJSON defaultRecordTypeOptions
 
 instance FromJSON PostSignTransactionData where
     parseJSON = genericParseJSON defaultRecordTypeOptions
@@ -2747,15 +2780,6 @@ instance FromText (AddressAmount Text) where
             [l, r] -> AddressAmount r <$> fromText l <*> pure mempty
             _ -> err
 
-instance FromText (ApiT SerialisedTx) where
-    fromText = bimap (const errMsg) (ApiT . SerialisedTx)
-        . convertFromBase Base16 . T.encodeUtf8
-      where
-        errMsg = TextDecodingError "Parse error. Expecting hex-encoded format."
-
--- instance FromText ApiSerialisedTransaction where
---     fromText = fmap ApiSerialisedTransaction . fromText
-
 instance FromText AnyAddress where
     fromText txt = case detectEncoding (T.unpack txt) of
         Just EBech32{} -> do
@@ -2787,6 +2811,36 @@ instance FromText (ApiT Cosigner) where
             _ -> Left $ TextDecodingError "Cosigner should be enumerated with number"
         _ -> Left $ TextDecodingError "Cosigner should be of form: cosigner#num"
 
+instance (HasBase b, ByteArray bs) => FromText (ApiBytesT b bs) where
+    fromText = fmap ApiBytesT . fromTextBytes (baseFor @b)
+instance (HasBase b, ByteArrayAccess bs) => ToText (ApiBytesT b bs) where
+    toText = toTextBytes (baseFor @b) . getApiBytesT
+
+-- instance ByteArray bs => FromText (ApiBytesT Base16 bs) where
+--     fromText = fmap ApiBytesT . fromTextBytes Base16
+-- instance ByteArrayAccess bs => ToText (ApiBytesT Base16 bs) where
+--     toText = toTextBytes Base16 . getApiBytesT
+-- instance ByteArray bs => FromText (ApiBytesT Base64 bs) where
+--     fromText = fmap ApiBytesT . fromTextBytes Base64
+-- instance ByteArrayAccess bs => ToText (ApiBytesT Base64 bs) where
+--     toText = toTextBytes Base64 . getApiBytesT
+
+class Typeable a => HasBase a where
+    baseFor :: Base
+instance HasBase 'Base16 where
+    baseFor = Base16
+instance HasBase 'Base64 where
+    baseFor = Base64
+
+fromTextBytes :: ByteArray bs => Base -> Text -> Either TextDecodingError bs
+fromTextBytes base = first (const errMsg) . convertFromBase base . T.encodeUtf8
+  where
+    errMsg = TextDecodingError $ mconcat
+        [ "Parse error. Expecting ", show base, "-encoded format." ]
+
+toTextBytes :: ByteArrayAccess bs => Base -> bs -> Text
+toTextBytes base = T.decodeLatin1 . convertToBase base
+
 {-------------------------------------------------------------------------------
                              HTTPApiData instances
 -------------------------------------------------------------------------------}
@@ -2796,11 +2850,20 @@ instance FromText a => FromHttpApiData (ApiT a) where
 instance ToText a => ToHttpApiData (ApiT a) where
     toUrlPiece = toText . getApiT
 
-instance MimeUnrender OctetStream (ApiT SerialisedTx) where
-    mimeUnrender _ = pure . ApiT . SerialisedTx . BL.toStrict
+instance MimeUnrender OctetStream (ApiBytesT base ByteString) where
+    mimeUnrender _ = pure . ApiBytesT . BL.toStrict
 
-instance MimeRender OctetStream (ApiT SerialisedTx) where
-   mimeRender _ = BL.fromStrict . view #payload . getApiT
+instance MimeRender OctetStream (ApiBytesT base ByteString) where
+   mimeRender _ = BL.fromStrict . getApiBytesT
+
+instance MimeUnrender OctetStream (ApiBytesT base SerialisedTx) where
+    mimeUnrender _ = pure . ApiBytesT . SerialisedTx . BL.toStrict
+
+instance MimeRender OctetStream (ApiBytesT base SerialisedTx) where
+   mimeRender _ = BL.fromStrict . view #payload . getApiBytesT
+
+instance MimeRender OctetStream ApiSignedTransaction where
+   mimeRender ct = mimeRender ct . view #payload
 
 instance FromHttpApiData ApiTxId where
     parseUrlPiece txt = case fromText txt of
@@ -2881,15 +2944,6 @@ toTextJSON = toJSON . toText . getApiT
 
 fromTextJSON :: FromText a => String -> Value -> Aeson.Parser (ApiT a)
 fromTextJSON n = withText n (eitherToParser . bimap ShowFmt ApiT . fromText)
-
-parseBase64Text :: Value -> Aeson.Parser ByteString
-parseBase64Text = parse Base64
-  where
-    parse base = withText (show base ++ " ByteString") $
-        eitherToParser . convertFromBase base . T.encodeUtf8
-
-toJSONBase64 :: ByteString -> Value
-toJSONBase64 = String . T.decodeLatin1 . convertToBase Base64
 
 {-------------------------------------------------------------------------------
                           User-Facing Address Encoding

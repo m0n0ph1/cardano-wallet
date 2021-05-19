@@ -115,7 +115,6 @@ module Cardano.Wallet
     , selectionToUnsignedTx
     , buildAndSignTransaction
     , signTransaction
-    , joinSerialisedTxParts
     , ErrSelectAssets(..)
     , ErrSignPayment (..)
     , ErrNotASequentialWallet (..)
@@ -1512,28 +1511,13 @@ signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
             let _rewardAcnt = mkRwdAcct (xprv, pwdP)
             -- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
             --     witnessTransaction tl rewardAcnt keyFrom txBody
-            pure $ SerialisedTxParts txBody []
+            let tx = mempty
+            pure $ SerialisedTxParts tx txBody []
 
   where
     db = ctx ^. dbLayer @IO @s @k
     tl = ctx ^. transactionLayer @k
     nl = ctx ^. networkLayer
-
-joinSerialisedTxParts
-    :: forall ctx k.
-        ( HasTransactionLayer k ctx
-        , HasNetworkLayer IO ctx
-        )
-    => ctx
-    -> SerialisedTxParts
-    -> IO ByteString
-joinSerialisedTxParts ctx (SerialisedTxParts txBody _wits) = do
-    _era <- currentNodeEra nl
-    -- TODO: ADP-919 encode full tx
-    pure txBody
-  where
-    nl = ctx ^. networkLayer
-    _tl = ctx ^. transactionLayer @k
 
 -- | Produce witnesses and construct a transaction from a given selection.
 --

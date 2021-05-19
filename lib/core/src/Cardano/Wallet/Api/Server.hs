@@ -65,7 +65,6 @@ module Cardano.Wallet.Api.Server
     , postRandomWallet
     , postRandomWalletFromXPrv
     , postSignTransaction
-    , postSignTransactionParts
     , postTransactionOld
     , postTransactionFeeOld
     , postTrezorWallet
@@ -189,6 +188,7 @@ import Cardano.Wallet.Api.Types
     , ApiBlockReference (..)
     , ApiByronWallet (..)
     , ApiByronWalletBalance (..)
+    , ApiBytesT (..)
     , ApiCoinSelection (..)
     , ApiCoinSelectionChange (..)
     , ApiCoinSelectionInput (..)
@@ -207,15 +207,16 @@ import Cardano.Wallet.Api.Types
     , ApiPostAccountKeyData (..)
     , ApiPostRandomAddressData (..)
     , ApiPutAddressesData (..)
-    , ApiRawMetadata (..)
     , ApiScriptTemplateEntry (..)
     , ApiSelectCoinsPayments
     , ApiSerialisedTransaction (..)
+    , ApiSerialisedTransactionParts (..)
     , ApiSharedWallet (..)
     , ApiSharedWalletPatchData (..)
     , ApiSharedWalletPostData (..)
     , ApiSharedWalletPostDataFromAccountPubX (..)
     , ApiSharedWalletPostDataFromMnemonics (..)
+    , ApiSignedTransaction
     , ApiSlotId (..)
     , ApiSlotReference (..)
     , ApiT (..)
@@ -386,7 +387,6 @@ import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenName (..), TokenPolicyId (..), nullTokenName )
 import Cardano.Wallet.Primitive.Types.Tx
     ( SerialisedTx (..)
-    , SerialisedTxParts (..)
     , TransactionInfo (TransactionInfo)
     , Tx (..)
     , TxChange (..)
@@ -1730,7 +1730,7 @@ listAddresses ctx normalize (ApiT wid) stateFilter = do
 -------------------------------------------------------------------------------}
 
 postSignTransaction
-    :: forall ctx s k (n :: NetworkDiscriminant).
+    :: forall ctx s k.
         ( ctx ~ ApiLayer s k
         , IsOwned s k
         , WalletKey k
@@ -1738,45 +1738,25 @@ postSignTransaction
     => ctx
     -> ApiT WalletId
     -> PostSignTransactionData
-    -> Handler (ApiT SerialisedTx)
-postSignTransaction ctx wid body = fmap (ApiT . SerialisedTx) $
-    postSignTransactionBase @_ @s @k @n ctx wid body
-    >>= liftIO . W.joinSerialisedTxParts @_ @k ctx
-
-postSignTransactionParts
-    :: forall ctx s k (n :: NetworkDiscriminant).
-        ( ctx ~ ApiLayer s k
-        , IsOwned s k
-        , WalletKey k
-        )
-    => ctx
-    -> ApiT WalletId
-    -> PostSignTransactionData
-    -> Handler (ApiT SerialisedTxParts)
-postSignTransactionParts ctx wid = fmap ApiT .
-    postSignTransactionBase @_ @s @k @n ctx wid
-
-postSignTransactionBase
-    :: forall ctx s k (n :: NetworkDiscriminant).
-        ( ctx ~ ApiLayer s k
-        , IsOwned s k
-        , WalletKey k
-        )
-    => ctx
-    -> ApiT WalletId
-    -> PostSignTransactionData
-    -> Handler SerialisedTxParts
-postSignTransactionBase ctx (ApiT wid) body = do
+    -> Handler ApiSignedTransaction
+postSignTransaction ctx (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     let txBody = case body ^. #transaction of
-                ApiSerialisedTransaction (ApiT (SerialisedTx bytes)) -> bytes
-                ApiSerialisedTransactionParts (ApiT (SerialisedTxParts bytes _wits)) -> bytes
+                ApiSerialisedTransaction (ApiBytesT (SerialisedTx bytes)) -> bytes -- TODO: decode tx
+                ApiSerialisedTransactionParts (ApiSerialisedTransactionParts' (ApiBytesT bytes) _wits) -> bytes
 
     -- (_, mkRwdAcct) <- mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
     let stubRwdAcct = first getRawKey
 
-    withWorkerCtx ctx wid liftE liftE $ \wrk ->
+    _tx <- withWorkerCtx ctx wid liftE liftE $ \wrk ->
         liftHandler $ W.signTransaction @_ @s @k wrk wid stubRwdAcct pwd txBody
+
+    -- fullTx <- liftIO . W.joinSerialisedTxParts @_ @k ctx tx
+    pure $ Api.ApiSignedTransaction
+        { payload = mempty -- TODO: join parts
+        , body = ApiBytesT txBody
+        , witnesses = []
+        }
 
 postTransactionOld
     :: forall ctx s k n.
@@ -2327,13 +2307,13 @@ getNetworkClock client = liftIO . getNtpStatus client
 -------------------------------------------------------------------------------}
 
 postExternalTransaction
-    :: forall ctx s k.
+    :: forall ctx s k b.
         ( ctx ~ ApiLayer s k
         )
     => ctx
-    -> ApiT SerialisedTx
+    -> ApiBytesT b SerialisedTx
     -> Handler ApiTxId
-postExternalTransaction ctx (ApiT (SerialisedTx bytes)) = do
+postExternalTransaction ctx (ApiBytesT (SerialisedTx bytes)) = do
     tx <- liftHandler $ W.submitExternalTx @ctx @k ctx bytes
     return $ ApiTxId (ApiT (txId tx))
 
@@ -2513,7 +2493,7 @@ mkApiCoinSelection deps mcerts meta (UnsignedTx inputs outputs change wdrls) =
         (mkApiCoinSelectionWithdrawal <$> wdrls)
         (fmap (uncurry mkCertificates) mcerts)
         (fmap mkApiCoin deps)
-        (ApiRawMetadata . serialiseToCBOR <$> meta)
+        (ApiBytesT . serialiseToCBOR <$> meta)
   where
     mkCertificates
         :: DelegationAction

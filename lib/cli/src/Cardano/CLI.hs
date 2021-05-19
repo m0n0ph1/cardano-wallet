@@ -147,12 +147,14 @@ import Cardano.Wallet.Api.Types
     , AllowedMnemonics
     , ApiAccountPublicKey
     , ApiByronWallet
+    , ApiBytesT (..)
     , ApiMnemonicT (..)
     , ApiPostRandomAddressData (..)
     , ApiT (..)
     , ApiTxId (ApiTxId)
     , ApiTxMetadata (..)
     , ApiWallet
+    , Base (Base16)
     , ByronWalletPostData (..)
     , ByronWalletStyle (..)
     , Iso8601Time (..)
@@ -208,6 +210,8 @@ import Data.Bifunctor
     ( bimap )
 import Data.Char
     ( toLower )
+import Data.Coerce
+    ( coerce )
 import Data.List.NonEmpty
     ( NonEmpty (..) )
 import Data.Maybe
@@ -861,7 +865,7 @@ cmdTransactionList mkTxClient =
 -- | Arguments for 'transaction submit' command
 data TransactionSubmitArgs = TransactionSubmitArgs
     { _port :: Port "Wallet"
-    , _payload :: ApiT SerialisedTx
+    , _payload :: ApiBytesT 'Base16 SerialisedTx
     }
 
 cmdTransactionSubmit
@@ -876,7 +880,7 @@ cmdTransactionSubmit mkTxClient =
         <*> transactionSubmitPayloadArgument
     exec (TransactionSubmitArgs wPort wPayload) = do
         runClient wPort Aeson.encodePretty $
-            postExternalTransaction mkTxClient wPayload
+            postExternalTransaction mkTxClient (coerce wPayload)
 
 -- | Arguments for 'transaction forget' command
 data TransactionForgetArgs = TransactionForgetArgs
@@ -1432,10 +1436,10 @@ accPubKeyArgument = argumentT $ mempty
     <> help "64-byte (128-character) hex-encoded public account key."
 
 -- | <payload=BINARY_BLOB>
-transactionSubmitPayloadArgument :: Parser (ApiT SerialisedTx)
+transactionSubmitPayloadArgument :: Parser (ApiBytesT 'Base16 SerialisedTx)
 transactionSubmitPayloadArgument = argumentT $ mempty
     <> metavar "BINARY_BLOB"
-    <> help "base64-encoded binary blob of externally-signed transaction."
+    <> help "hex-encoded binary blob of externally-signed transaction."
 
 -- | [--metadata=JSON]
 --

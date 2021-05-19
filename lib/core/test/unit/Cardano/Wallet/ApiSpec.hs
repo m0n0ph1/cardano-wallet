@@ -346,6 +346,27 @@ instance GenericApiSpec (Map [Text] [Method])
             _ _ = False
 
 
+instance
+    ( Typeable a
+    , GenericApiSpec (PathParam a -> [Request])
+    , GenericApiSpec b
+    ) => GenericApiSpec (PathParam a -> [Request] :<|> b) where
+    gSpec _toRequest _toSpec = error "fixme"
+
+instance
+    ( Typeable a
+    , GenericApiSpec b
+    ) => GenericApiSpec (BodyParam a -> IO ([Request] :<|> b)) where
+    gSpec _toRequest _toSpec = error "fixme"
+
+instance
+    ( Typeable ct
+    , KnownSymbol h0
+    , KnownSymbol h1
+    ) => GenericApiSpec (Header h0 ct -> (Header h1 ct -> [Request]) :<|> (Header h1 Servant.JSON -> [Request])) where
+    gSpec _toRequest _toSpec = error "fixme"
+
+
 --
 -- Construct test cases from the API
 --

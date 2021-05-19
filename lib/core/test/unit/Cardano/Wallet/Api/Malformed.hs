@@ -52,6 +52,7 @@ import Prelude
 import Cardano.Wallet.Api.Types
     ( ApiAddressData
     , ApiAddressInspectData
+    , ApiBytesT (..)
     , ApiMaintenanceActionPostData
     , ApiPoolId
     , ApiPostAccountKeyData
@@ -67,6 +68,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletMigrationPostData
     , ApiWalletPassphrase
     , ApiWalletSignData
+    , Base (Base64)
     , ByronWalletPutPassphraseData
     , PostSignTransactionData
     , PostTransactionFeeOldData
@@ -1165,26 +1167,26 @@ instance Malformed (BodyParam PostSignTransactionData) where
          jsonInvalid = first BodyParam <$>
             [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed")
             , ("\"hello\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed, expected Object, but encountered String")
-            , ("{\"tx\": \"\", \"random\"}", msgJsonInvalid)
-            , ("{\"tx\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "fixme")
-            , ("{\"tx\": 1020344, \"passphase\": \"Secure Passphrase\"}", "fixme")
-            , ("{\"tx\": { \"body\", 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
+            , ("{\"transaction\": \"\", \"random\"}", msgJsonInvalid)
+            , ("{\"transaction\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "")
+            , ("{\"transaction\": 1020344, \"passphase\": \"Secure Passphrase\"}", "fixme")
+            , ("{\"transaction\": { \"body\", 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
             ]
-         jsonValid = first (BodyParam . Aeson.encode) <$> paymentCases ++
+         jsonValid = first (BodyParam . Aeson.encode) <$>
             [ -- passphrase
               ( [aesonQQ|
-                { "tx": "cafecafe"
+                { "transaction": "cafecafe"
                 }|]
               , "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData(PostSignTransactionData) failed, key 'passphrase' not found"
               )
             , ( [aesonQQ|
-               { "tx": "cafecafe",
+               { "transaction": "cafecafe",
                   "passphrase": #{nameTooLong}
                }|]
                , "Error in $.passphrase: passphrase is too long: expected at most 255 characters"
               )
             , ( [aesonQQ|
-               { "tx": { "witnesses": [] },
+               { "transaction": { "witnesses": [] },
                   "passphrase": #{wPassphrase}
                }|]
                , "Error in $: key 'body' not found"
@@ -1331,7 +1333,7 @@ instance Malformed (BodyParam ApiSlotReference) where
               )
             ]
 
-instance Malformed (BodyParam (ApiT SerialisedTx))
+instance Malformed (BodyParam (ApiBytesT 'Base64 SerialisedTx))
 -- no cases here as all bad requests are served by ErrDecodeSignedTxWrongPayload
 -- in Server.hs. Tested by integration tests.
 

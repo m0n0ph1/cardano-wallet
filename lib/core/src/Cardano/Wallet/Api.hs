@@ -161,6 +161,7 @@ import Cardano.Wallet.Api.Types
     , ApiAddressT
     , ApiAsset
     , ApiByronWallet
+    , ApiBytesT
     , ApiCoinSelectionT
     , ApiFee
     , ApiHealthCheck
@@ -177,6 +178,7 @@ import Cardano.Wallet.Api.Types
     , ApiSharedWallet
     , ApiSharedWalletPatchData
     , ApiSharedWalletPostData
+    , ApiSignedTransaction
     , ApiT
     , ApiTransactionT
     , ApiTxId
@@ -189,6 +191,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletMigrationPostDataT
     , ApiWalletPassphrase
     , ApiWalletSignData
+    , Base (Base64)
     , ByronWalletPutPassphraseData
     , Iso8601Time
     , KeyFormat
@@ -224,7 +227,7 @@ import Cardano.Wallet.Primitive.Types.Coin
 import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenName, TokenPolicyId )
 import Cardano.Wallet.Primitive.Types.Tx
-    ( SerialisedTx, SerialisedTxParts )
+    ( SerialisedTx )
 import Cardano.Wallet.Registry
     ( HasWorkerCtx (..), WorkerLog, WorkerRegistry )
 import Cardano.Wallet.TokenMetadata
@@ -495,8 +498,7 @@ type SignTransaction n = "wallets"
     :> "transactions"
     :> "sign"
     :> ReqBody '[JSON] PostSignTransactionData
-    :> (PostAccepted '[JSON, OctetStream] (ApiT SerialisedTx) :<|>
-        PostAccepted '[JSON] (ApiT SerialisedTxParts))
+    :> PostAccepted '[JSON, OctetStream] ApiSignedTransaction
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postTransaction
 type CreateTransactionOld n = "wallets"
@@ -791,8 +793,7 @@ type SignByronTransaction n = "byron-wallets"
     :> "transactions"
     :> "sign"
     :> ReqBody '[JSON] PostSignTransactionData
-    :> (PostAccepted '[JSON, OctetStream] (ApiT SerialisedTx) :<|>
-        PostAccepted '[JSON] (ApiT SerialisedTxParts))
+    :> PostAccepted '[JSON, OctetStream] ApiSignedTransaction
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postByronTransaction
 type CreateByronTransactionOld n = "byron-wallets"
@@ -1001,7 +1002,7 @@ type Proxy_ =
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postExternalTransaction
 type PostExternalTransaction = "proxy"
     :> "transactions"
-    :> ReqBody '[OctetStream] (ApiT SerialisedTx)
+    :> ReqBody '[OctetStream] (ApiBytesT 'Base64 SerialisedTx)
     :> PostAccepted '[JSON] ApiTxId
 
 {-------------------------------------------------------------------------------

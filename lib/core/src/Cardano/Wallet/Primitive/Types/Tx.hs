@@ -92,7 +92,7 @@ import Control.DeepSeq
 import Data.Bifunctor
     ( first )
 import Data.ByteArray
-    ( ByteArrayAccess )
+    ( ByteArray, ByteArrayAccess )
 import Data.ByteString
     ( ByteString )
 import Data.Function
@@ -409,16 +409,17 @@ newtype SealedTx = SealedTx { getSealedTx :: ByteString }
 -- | A serialised transaction that may be only partially signed, or even
 -- invalid.
 newtype SerialisedTx = SerialisedTx { payload :: ByteString }
-    deriving stock (Show, Eq, Generic)
-    deriving newtype (ByteArrayAccess, NFData)
+    deriving stock (Show, Eq, Generic, Ord)
+    deriving newtype (Semigroup, Monoid, ByteArray, ByteArrayAccess, NFData)
 
 -- | @SerialisedTxParts@ is a serialised transaction body, and a possibly
--- incomplete set of serialised witnesses.
+-- incomplete set of serialised witnesses, along with an encoding of the
+-- combined transaction.
 data SerialisedTxParts = SerialisedTxParts
-    { serialisedTxBody :: ByteString
+    { serialisedTx :: ByteString
+    , serialisedTxBody :: ByteString
     , serialisedTxWitnesses :: [ByteString]
-    }
-    deriving stock (Show, Eq, Generic)
+    } deriving stock (Show, Eq, Generic)
 
 -- | True if the given metadata refers to a pending transaction
 isPending :: TxMeta -> Bool
