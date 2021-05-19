@@ -1174,10 +1174,10 @@ x-transactionResolvedWithdrawals: &transactionResolvedWithdrawals
       derivation_path: *derivationPath
       amount: *amount
 
-x-serializedHex: &serializedHex
-  description: Serialized data, hex encoded.
+x-serializedTransaction: &serializedTransaction
+  description: CBOR transaction data, base64-encoded.
   type: string
-  format: hex
+  format: base64
 
 x-signedTransactionBlob: &signedTransactionBlob
   description: Signed transaction message binary blob.
@@ -1933,13 +1933,24 @@ components:
 
     x-txBody: &txBody
       oneOf:
-        - <<: *serializedHex
+        - <<: *serializedTransaction
           title: Serialized transaction body
 
     x-txWits: &txWitnesses
       type: array
-      items: *serializedHex
+      items: *serializedTransaction
       title: Serialized transaction witnesses
+
+    ApiSerialisedTransactionParts: &ApiSerialisedTransactionParts
+      type: object
+      description: |
+        A transaction, comprising of individually encoded body and
+        witness set.
+      required:
+        - body
+      properties:
+        body: *txBody
+        witnesses: *txWitnesses
 
     ApiSerialisedTransaction: &ApiSerialisedTransaction
       description: |
@@ -1947,15 +1958,21 @@ components:
         a body and witness set, each of these being individually
         encoded.
       oneOf:
-        - <<: *serializedHex
+        - <<: *serializedTransaction
           title: Serialized transaction
-        - type: object
+        - <<: *ApiSerialisedTransactionParts
           title: Serialized body and witnesses
+
+    ApiSignedTransaction: &ApiSignedTransaction
+      description: |
+        The result of signing a transaction.
+      allOf:
+        - type: object
           required:
-            - body
+            - payload
           properties:
-            body: *txBody
-            witnesses: *txWitnesses
+            payload: *serializedTransaction
+        - <<: *ApiSerialisedTransactionParts
 
     ApiWalletDelegationNext: &ApiWalletDelegationNext
       type: object
@@ -3963,7 +3980,7 @@ x-responsesPostSignTransaction: &responsesPostSignTransaction
     description: Accepted
     content:
       application/json:
-        schema: *ApiSerialisedTransaction
+        schema: *ApiSignedTransaction
       application/octet-stream:
         schema: *signedTransactionBlob
 
