@@ -269,10 +269,10 @@ byronWalletClient =
             , listWallets = _listWallets
             , postWallet = _postWallet
             , putWallet = _putWallet
-            , putWalletPassphrase = \wid body ->
+            , putWalletPassphrase = \wid req ->
                 _putWalletPassphrase wid $ ByronWalletPutPassphraseData
-                    { oldPassphrase = Just $ coerce <$> body ^. #oldPassphrase
-                    , newPassphrase = body ^. #newPassphrase
+                    { oldPassphrase = Just $ coerce <$> req ^. #oldPassphrase
+                    , newPassphrase = req ^. #newPassphrase
                     }
             , getWalletUtxoStatistics = _getWalletUtxoStatistics
             }
