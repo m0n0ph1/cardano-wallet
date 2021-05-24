@@ -1165,12 +1165,12 @@ instance Malformed (BodyParam PostSignTransactionData) where
     malformed = jsonValid ++ jsonInvalid
      where
          jsonInvalid = first BodyParam <$>
-            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed")
-            , ("\"hello\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed, expected Object, but encountered String")
+            [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData(PostSignTransactionData) failed, expected Object, but encountered Number")
+            , ("\"hello\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData(PostSignTransactionData) failed, expected Object, but encountered String")
             , ("{\"transaction\": \"\", \"random\"}", msgJsonInvalid)
-            , ("{\"transaction\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "")
-            , ("{\"transaction\": 1020344, \"passphase\": \"Secure Passphrase\"}", "fixme")
-            , ("{\"transaction\": { \"body\", 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
+            , ("{\"transaction\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "Error in $.transaction: parsing ApiSerialisedTransactionParts failed, expected Object, but encountered String")
+            , ("{\"transaction\": 1020344, \"passphase\": \"Secure Passphrase\"}", "Error in $.transaction: parsing ApiSerialisedTransactionParts failed, expected Object, but encountered Number")
+            , ("{\"transaction\": { \"body\": 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
             ]
          jsonValid = first (BodyParam . Aeson.encode) <$>
             [ -- passphrase
@@ -1189,7 +1189,7 @@ instance Malformed (BodyParam PostSignTransactionData) where
                { "transaction": { "witnesses": [] },
                   "passphrase": #{wPassphrase}
                }|]
-               , "Error in $: key 'body' not found"
+               , "Error in $.transaction: key 'body' not found"
               )
             ]
 
