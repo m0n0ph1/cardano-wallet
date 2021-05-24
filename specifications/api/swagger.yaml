@@ -1965,14 +1965,24 @@ components:
 
     ApiSignedTransaction: &ApiSignedTransaction
       description: |
-        The result of signing a transaction.
-      allOf:
-        - type: object
-          required:
-            - payload
-          properties:
-            payload: *serializedTransaction
-        - <<: *ApiSerialisedTransactionParts
+        The result of signing a transaction. Both the encoded
+        transaction, and individually encoded body and witness set are
+        included in the response.
+      type: object
+      required:
+        - payload
+        - body
+      properties:
+        payload: *serializedTransaction
+        body: *txBody
+        witnesses: *txWitnesses
+      # allOf:
+      #   - type: object
+      #     required:
+      #       - payload
+      #     properties:
+      #       payload: *serializedTransaction
+      #   - <<: *ApiSerialisedTransactionParts
 
     ApiWalletDelegationNext: &ApiWalletDelegationNext
       type: object
