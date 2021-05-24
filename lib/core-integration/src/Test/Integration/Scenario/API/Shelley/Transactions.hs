@@ -21,6 +21,7 @@ import Prelude
 
 import Cardano.Mnemonic
     ( entropyToMnemonic, genEntropy, mnemonicToText )
+import qualified Cardano.Api as Cardano
 import Cardano.Wallet.Api.Types
     ( AddressAmount (..)
     , ApiAddress
@@ -1022,6 +1023,27 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
 
     it "TRANS_MINT_01 - Mint tokens" $ \ctx -> runResourceT $ do
       w <- fixtureWallet ctx
+      
+      -- let
+      --   bod :: Cardano.TxBody Cardano.MaryEra
+      --   bod =
+      --     either (error . show) Prelude.id $ Cardano.makeTransactionBody $ Cardano.TxBodyContent
+      --       { Cardano.txIns = []
+      --       , Cardano.txOuts = []
+      --       , Cardano.txWithdrawals = Cardano.TxWithdrawalsNone
+      --       , Cardano.txCertificates = Cardano.TxCertificatesNone
+      --       , Cardano.txFee = Cardano.TxFeeExplicit Cardano.TxFeesExplicitInMaryEra mempty
+      --       , Cardano.txValidityRange = 
+      --           ( Cardano.TxValidityNoLowerBound
+      --           , Cardano.TxValidityNoUpperBound Cardano.ValidityNoUpperBoundInMaryEra
+      --           )
+      --       , Cardano.txMetadata = Cardano.TxMetadataNone
+      --       , Cardano.txAuxScripts = Cardano.TxAuxScriptsNone
+      --       , Cardano.txUpdateProposal = Cardano.TxUpdateProposalNone
+      --       , Cardano.txMintValue = Cardano.TxMintNone
+      --       }
+
+      -- liftIO $ putStrLn $ show bod
 
       addrs <- listAddresses @n ctx w
       let destination = (addrs !! 1) ^. #id

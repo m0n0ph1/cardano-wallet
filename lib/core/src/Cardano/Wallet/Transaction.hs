@@ -32,7 +32,6 @@ module Cardano.Wallet.Transaction
     , ErrSelectionCriteria (..)
     , ErrOutputTokenBundleSizeExceedsLimit (..)
     , ErrOutputTokenQuantityExceedsLimit (..)
-
     ) where
 
 import Prelude
@@ -40,7 +39,7 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv )
 import Cardano.Api
-    ( AnyCardanoEra )
+    ( AnyCardanoEra, SimpleScript, SimpleScriptV2 )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( Depth (..), DerivationIndex, Passphrase )
 import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
@@ -93,6 +92,8 @@ data TransactionLayer k = TransactionLayer
             -- assigned.
         -> Maybe (k 'ScriptK XPrv, Passphrase "encryption")
             -- Extra witness
+        -> [SimpleScript SimpleScriptV2]
+            -- Script witnesses
         -> Either ErrMkTx (Tx, SealedTx)
         -- ^ Construct a standard transaction
         --

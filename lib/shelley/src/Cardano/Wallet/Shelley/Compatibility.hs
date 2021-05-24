@@ -130,11 +130,15 @@ import Cardano.Address.Derivation
 import Cardano.Api
     ( AllegraEra
     , AnyCardanoEra (..)
+    , TimeLocksSupported(TimeLocksInSimpleScriptV2)
     , AsType (..)
     , CardanoEra (..)
+    , Hash(..)
+    , PaymentKey(..)
     , MaryEra
     , NetworkId
     , ShelleyEra
+    , SimpleScript(..)
     , deserialiseFromRawBytes
     )
 import Cardano.Api.Shelley
@@ -147,6 +151,7 @@ import Cardano.Ledger.Era
     ( Era (..) )
 import Cardano.Slotting.Slot
     ( EpochNo (..), EpochSize (..) )
+import qualified Cardano.Address.Script as Cardano.Address
 import Cardano.Wallet.Api.Types
     ( DecodeAddress (..)
     , DecodeStakeAddress (..)
@@ -171,7 +176,7 @@ import Control.Applicative
 import Control.Arrow
     ( left )
 import Control.Monad
-    ( when, (>=>) )
+    ( when, (>=>), forM )
 import Crypto.Hash.Utils
     ( blake2b224 )
 import Data.Bifunctor
@@ -268,6 +273,7 @@ import Type.Reflection
 
 import qualified Cardano.Address.Style.Shelley as CA
 import qualified Cardano.Api as Cardano
+import qualified Data.Text as T
 import qualified Cardano.Api.Byron as Cardano
     ( Tx (ByronTx) )
 import qualified Cardano.Api.Shelley as Cardano

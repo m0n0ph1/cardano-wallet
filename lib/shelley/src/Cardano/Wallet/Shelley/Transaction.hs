@@ -282,16 +282,18 @@ mkTx
     -- ^ Explicit fee amount
     -> Maybe (NE.NonEmpty (Address, TokenMap))
     -> Maybe (k 'ScriptK XPrv, Passphrase "encryption")
+    -> [Cardano.SimpleScript Cardano.SimpleScriptV2]
     -> ShelleyBasedEra era
     -> Either ErrMkTx (Tx, SealedTx)
-mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts extraWit era = do
+mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts extraWit scripts era = do
     let TxPayload md certs mkExtraWits = payload
     let wdrls = mkWithdrawals
             networkId
             (toRewardAccountRaw . toXPub $ rewardAcnt)
             wdrl
 
-    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mForgeOuts
+
+    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mForgeOuts []
 
     wits <- case (txWitnessTagFor @k) of
         TxWitnessShelleyUTxO -> do
@@ -305,18 +307,24 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
                       [mkShelleyWitness unsigned (rewardAcnt, pwdAcnt)]
 
             mintBurnWits <- do
-            --   let
-            --     list :: [(Address, TokenMap)]
-            --     list = maybe [] (NE.toList) mForgeOuts
+              let
+                list :: [(Address, TokenMap)]
+                list = maybe [] (NE.toList) mForgeOuts
 
-            --     uniqueAddrs :: [Address]
-            --     uniqueAddrs = nub . fmap fst $ list
+                uniqueAddrs :: [Address]
+                uniqueAddrs = nub . fmap fst $ list
 
-            --   forM uniqueAddrs $ \addr -> do
-            --     (k, pwd) <- lookupPrivateKey keyFrom addr
-                pure $ case extraWit of
-                  Nothing -> []
-                  Just (wit, pwd) -> [mkShelleyWitness unsigned (getRawKey wit, pwd)]
+              xs1 <- forM uniqueAddrs $ \addr -> do
+                (k, pwd) <- lookupPrivateKey keyFrom addr
+                pure $ mkShelleyWitness unsigned (getRawKey k, pwd)
+
+              xs2 <-
+                pure $
+                  case extraWit of
+                    Nothing -> []
+                    Just (wit, pwd) -> [mkShelleyWitness unsigned (getRawKey wit, pwd)]
+
+              pure $ xs1 <> xs2
 
             pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> mintBurnWits
 
@@ -343,7 +351,7 @@ newTransactionLayer
     => NetworkId
     -> TransactionLayer k
 newTransactionLayer networkId = TransactionLayer
-    { mkTransaction = \era stakeCreds keystore pp ctx selection extraWit -> do
+    { mkTransaction = \era stakeCreds keystore pp ctx selection extraWit scripts -> do
         let ttl   = txTimeToLive ctx
         let wdrl  = withdrawalToCoin $ view #txWithdrawal ctx
         let delta = selectionDelta txOutCoin selection
@@ -353,7 +361,7 @@ newTransactionLayer networkId = TransactionLayer
                 withShelleyBasedEra era $ do
                     let payload = TxPayload (view #txMetadata ctx) mempty mempty
                     let fees = delta
-                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge extraWit
+                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge extraWit scripts
 
             Just action -> do
                 withShelleyBasedEra era $ do
@@ -368,7 +376,7 @@ newTransactionLayer networkId = TransactionLayer
                                 unsafeSubtractCoin selection delta (stakeKeyDeposit pp)
                             _ ->
                                 delta
-                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge extraWit
+                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge extraWit scripts
 
     , initSelectionCriteria = _initSelectionCriteria @k
 
@@ -1136,8 +1144,9 @@ mkUnsignedTx
     -> [Cardano.Certificate]
     -> Cardano.Lovelace
     -> Maybe (NE.NonEmpty (Address, TokenMap))
+    -> [Cardano.SimpleScript Cardano.SimpleScriptV2]
     -> Either ErrMkTx (Cardano.TxBody era)
-mkUnsignedTx era ttl cs md wdrls certs fees mForgeOuts =
+mkUnsignedTx era ttl cs md wdrls certs fees mForgeOuts scripts =
     case era of
         ShelleyBasedEraShelley -> mkShelleyTx
         ShelleyBasedEraAllegra -> mkAllegraTx
@@ -1254,8 +1263,9 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeOuts =
                 (Cardano.TxMetadataInEra Cardano.TxMetadataInMaryEra)
                 md
 
-        , Cardano.txAuxScripts =
-            Cardano.TxAuxScriptsNone
+        , Cardano.txAuxScripts = case scripts of
+            [] -> Cardano.TxAuxScriptsNone
+            xs -> Cardano.TxAuxScripts Cardano.AuxScriptsInMaryEra ((Cardano.ScriptInEra Cardano.SimpleScriptV2InMary . Cardano.SimpleScript Cardano.SimpleScriptV2) <$> xs)
 
         , Cardano.txUpdateProposal =
             Cardano.TxUpdateProposalNone

@@ -40,6 +40,8 @@ library
     , cardano-addresses
     , cardano-api
     , cardano-crypto
+    , cardano-crypto-class
+    , cardano-crypto-wrapper
     , cardano-numeric
     , cardano-slotting
     , cborg
@@ -97,6 +99,7 @@ library
     , servant
     , servant-client
     , servant-server
+    , shelley-spec-ledger
     , split
     , statistics
     , streaming-commons

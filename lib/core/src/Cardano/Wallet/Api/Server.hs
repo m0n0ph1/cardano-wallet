@@ -1770,7 +1770,7 @@ postTransaction ctx genChange (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing []
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)
@@ -1930,7 +1930,7 @@ joinStakePool ctx knownPools getPoolStatus apiPoolId (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing []
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -2015,7 +2015,7 @@ quitStakePool ctx (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' Nothing []
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -2167,9 +2167,7 @@ migrateWallet ctx withdrawalType (ApiT wid) postData = do
                     , txDelegationAction = Nothing
                     }
             (tx, txMeta, txTime, sealedTx) <- liftHandler $
-                W.signTransaction @_ @s @k wrk wid mkRewardAccount pwd txContext
-                    (selection {changeGenerated = []})
-                    Nothing
+                W.signTransaction @_ @s @k wrk wid mkRewardAccount pwd txContext (selection {changeGenerated = []}) Nothing []
             liftHandler $
                 W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
             liftIO $ mkApiTransaction
@@ -3608,7 +3606,7 @@ forgeToken ctx genChange (ApiT wid) body = do
 
         (tx, txMeta, txTime, sealedTx) <- liftHandler $
             W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
-                (Just (skey, encPwd))
+                (Just (skey, encPwd)) [script]
         -- liftIO $ putStrLn $ "Finished SIGN"
         -- liftIO $ putStrLn $ show tx
         liftHandler
