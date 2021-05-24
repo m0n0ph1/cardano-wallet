@@ -203,14 +203,11 @@ import Cardano.Address.Derivation
 import Cardano.Address.Script
     ( Cosigner (..), KeyHash, Script, ScriptTemplate, ValidationLevel (..) )
 import Cardano.Api
-    ( AssetName
-    , TxMetadataJsonSchema (..)
+    ( TxMetadataJsonSchema (..)
     , displayError
     , metadataFromJson
     , metadataToJson
     )
-import qualified Cardano.Api as Cardano
-    ( Quantity )
 import Cardano.Mnemonic
     ( MkSomeMnemonic (..)
     , MkSomeMnemonicError (..)
@@ -373,8 +370,6 @@ import GHC.TypeLits
     ( Nat, Symbol )
 import Numeric.Natural
     ( Natural )
-import Quiet
-    ( Quiet (..) )
 import Servant.API
     ( MimeRender (..), MimeUnrender (..), OctetStream )
 import Web.HttpApiData
