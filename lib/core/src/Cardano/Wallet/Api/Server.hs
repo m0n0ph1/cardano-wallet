@@ -116,17 +116,11 @@ import Cardano.Address.Derivation
 import Cardano.Address.Script
     ( Cosigner (..)
     , KeyHash
-    , KeyRole
     , Script (RequireSignatureOf)
     , ScriptTemplate (..)
     )
-import qualified Cardano.Address.Script as CA
 import Cardano.Api
-    ( AnyCardanoEra (..)
-    , AssetName (AssetName)
-    , CardanoEra (..)
-    , SerialiseAsCBOR (..)
-    )
+    ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..) )
 import Cardano.BM.Tracing
     ( HasPrivacyAnnotation (..), HasSeverityAnnotation (..) )
 import Cardano.Mnemonic
@@ -293,13 +287,11 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Passphrase (..)
     , PaymentAddress (..)
     , RewardAccount (..)
-    , Role (UtxoExternal)
+    , Role
     , SoftDerivation (..)
     , WalletKey (..)
     , deriveRewardAccount
-    , deriveVerificationKey
     , digest
-    , hashVerificationKey
     , preparePassphrase
     , publicKey
     )
@@ -342,10 +334,8 @@ import Cardano.Wallet.Primitive.AddressDiscovery.Shared
     , walletCreationInvariant
     )
 import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
-    ( SelectionCriteria (..)
-    , SelectionError (..)
-    , SelectionInsufficientError (..)
-    , SelectionResult (outputsCovered, changeGenerated)
+    ( SelectionError (..)
+    , SelectionResult (..)
     , UnableToConstructChangeError (..)
     , balanceMissing
     , selectionDelta
@@ -396,7 +386,6 @@ import Cardano.Wallet.Primitive.Types.TokenBundle
     ( Flat (..), TokenBundle (..) )
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
-import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenName (..)
     , TokenPolicyId (..)
@@ -488,8 +477,6 @@ import Data.Set
     ( Set )
 import Data.Streaming.Network
     ( HostPreference, bindPortTCP, bindRandomPortTCP )
-import Data.String
-    ( fromString )
 import Data.Text
     ( Text )
 import Data.Text.Class
@@ -556,7 +543,6 @@ import UnliftIO.Concurrent
 import UnliftIO.Exception
     ( IOException, bracket, throwIO, tryAnyDeep, tryJust )
 
-import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet as W
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Network as NW
@@ -565,6 +551,7 @@ import qualified Cardano.Wallet.Primitive.AddressDerivation.Icarus as Icarus
 import qualified Cardano.Wallet.Primitive.Types as W
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
+import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import qualified Cardano.Wallet.Primitive.Types.Tx as W
 import qualified Cardano.Wallet.Primitive.Types.UTxO as UTxO
 import qualified Cardano.Wallet.Registry as Registry
@@ -2181,7 +2168,8 @@ migrateWallet ctx withdrawalType (ApiT wid) postData = do
                     }
             (tx, txMeta, txTime, sealedTx) <- liftHandler $
                 W.signTransaction @_ @s @k wrk wid mkRewardAccount pwd txContext
-                    (selection {changeGenerated = []}) Nothing
+                    (selection {changeGenerated = []})
+                    Nothing
             liftHandler $
                 W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
             liftIO $ mkApiTransaction
@@ -3543,15 +3531,11 @@ forgeToken
         , AddressIndexDerivationType k ~ 'Soft
         , WalletKey k
         , GenChange s
-        , HardDerivation k
         , SoftDerivation k
         , HasNetworkLayer IO ctx
         , IsOwned s k
         , Typeable n
         , Typeable s
-        , PaymentAddress n k
-        , CompareDiscovery s
-        , KnownAddresses s
         )
     => ctx
     -> ArgGenChange s
@@ -3562,7 +3546,7 @@ forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     let assetName = body ^. #assetName . #getApiT
     let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
-    let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyIndex
+    let derivationIndex = maybe (DerivationIndex 0) getApiT $ body ^. #monetaryPolicyIndex
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
     let (ApiT addr, _) = body ^. #address
@@ -3582,14 +3566,9 @@ forgeToken ctx genChange (ApiT wid) body = do
         --      m/1852(purpose)​/​1815(coin_type)/0(account)​/3/1 -> monetary policy 2
 
         -- Derive a signing key for the monetary policy
-        policyKey <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (UtxoExternal, derivationIndex)
+        (skey, vkeyHash, encPwd) <- liftHandler $ W.deriveScriptSigningCreds @_ @s @k @n wrk wid pwd derivationIndex
 
         let
-          scriptXPub = publicKey $ fst policyKey
-
-          vkeyHash :: KeyHash
-          vkeyHash = hashVerificationKey @k UtxoExternal $ liftRawKey $ getRawKey scriptXPub
-
           script :: Script KeyHash
           script = RequireSignatureOf vkeyHash
 
@@ -3618,6 +3597,7 @@ forgeToken ctx genChange (ApiT wid) body = do
             $ W.selectAssets @_ @s @k wrk w txCtx txout (const Prelude.id)
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
+
         -- liftIO $ putStrLn $ "Finished SEL"
         -- liftIO $ putStrLn $ show sel
 
@@ -3626,8 +3606,9 @@ forgeToken ctx genChange (ApiT wid) body = do
         --          otherwise -> txout
         --          ) (outputsCovered sel)
 
-        (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' (Just policyKey)
+        (tx, txMeta, txTime, sealedTx) <- liftHandler $
+            W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
+                (Just (skey, encPwd))
         -- liftIO $ putStrLn $ "Finished SIGN"
         -- liftIO $ putStrLn $ show tx
         liftHandler

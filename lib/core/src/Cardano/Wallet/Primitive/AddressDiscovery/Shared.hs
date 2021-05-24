@@ -72,7 +72,7 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Role (..)
     , SoftDerivation
     , WalletKey (..)
-    , deriveVerificationKey
+    , deriveScriptVerificationKey
     , hashVerificationKey
     )
 import Cardano.Wallet.Primitive.AddressDerivation.SharedKey
@@ -509,7 +509,7 @@ keyHashFromAccXPubIx
     -> Index 'Soft 'ScriptK
     -> KeyHash
 keyHashFromAccXPubIx accXPub r ix =
-    hashVerificationKey r $ deriveVerificationKey accXPub r ix
+    hashVerificationKey r $ deriveScriptVerificationKey accXPub r ix
 
 liftPaymentAddress
     :: forall (n :: NetworkDiscriminant) (k :: Depth -> Type -> Type). Typeable n

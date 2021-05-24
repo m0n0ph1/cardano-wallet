@@ -29,7 +29,6 @@
 --  * "Cardano.Wallet.Primitive.AddressDerivation.Shelley"
 --  * "Cardano.Wallet.Primitive.AddressDerivation.Byron"
 
-{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Cardano.Wallet.Primitive.AddressDerivation
     (
     -- * HD Derivation
@@ -47,7 +46,8 @@ module Cardano.Wallet.Primitive.AddressDerivation
     , DerivationPrefix (..)
     , DerivationIndex (..)
     , liftIndex
-    , deriveVerificationKey
+    , deriveScriptVerificationKey
+    , deriveScriptSigningKey
     , hashVerificationKey
 
     -- * Delegation
@@ -495,14 +495,29 @@ deriveRewardAccount pwd rootPrv =
     let accPrv = deriveAccountPrivateKey pwd rootPrv minBound
     in deriveAddressPrivateKey pwd accPrv MutableAccount minBound
 
-deriveVerificationKey
+deriveScriptVerificationKey
     :: (SoftDerivation k, WalletKey k)
     => k 'AccountK XPub
     -> Role
     -> Index 'Soft 'ScriptK
     -> k 'ScriptK XPub
-deriveVerificationKey accXPub role' =
+deriveScriptVerificationKey accXPub role' =
     liftRawKey . getRawKey . deriveAddressPublicKey accXPub role' . coerce
+
+deriveScriptSigningKey
+    :: ( HardDerivation key, WalletKey key )
+    => Passphrase "encryption"
+    -> key 'RootK XPrv
+    -> Index 'Hardened 'AccountK
+    -> Index (AddressIndexDerivationType key) 'ScriptK
+    -> (key 'ScriptK XPrv, KeyHash)
+deriveScriptSigningKey pwd rootPrv acctIx addrIx = (scriptK, vkeyHash)
+  where
+    scriptK = liftRawKey (getRawKey addrK)
+    addrK = deriveAddressPrivateKey pwd accPrv role' (coerce addrIx)
+    accPrv = deriveAccountPrivateKey pwd rootPrv acctIx
+    role' = UtxoExternal
+    vkeyHash = hashVerificationKey role' (publicKey scriptK)
 
 hashVerificationKey
     :: WalletKey k

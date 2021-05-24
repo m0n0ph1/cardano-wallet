@@ -167,7 +167,7 @@ module Cardano.Wallet
     -- ** Root Key
     , withRootKey
     , derivePublicKey
-    , derivePrivateKey
+    , deriveScriptSigningCreds
     , readPublicAccountKey
     , signMetadataWith
     , ErrWithRootKey (..)
@@ -193,7 +193,7 @@ import Prelude hiding
 import Cardano.Address.Derivation
     ( XPrv, XPub )
 import Cardano.Address.Script
-    ( Cosigner (..) )
+    ( Cosigner (..), KeyHash )
 import Cardano.Api
     ( serialiseToCBOR )
 import Cardano.BM.Data.Severity
@@ -242,6 +242,7 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , ToRewardAccount (..)
     , WalletKey (..)
     , checkPassphrase
+    , deriveScriptSigningKey
     , encryptPassphrase
     , liftIndex
     , preparePassphrase
@@ -2266,7 +2267,7 @@ derivePublicKey ctx wid role_ ix = db & \DBLayer{..} -> do
   where
     db = ctx ^. dbLayer @IO @s @k
 
-derivePrivateKey
+deriveScriptSigningCreds
     :: forall ctx s k n.
         ( HasDBLayer IO s k ctx
         , HardDerivation k
@@ -2277,12 +2278,14 @@ derivePrivateKey
     => ctx
     -> WalletId
     -> Passphrase "raw"
-    -> (Role, DerivationIndex)
-    -> ExceptT ErrSignMetadataWith IO (k 'ScriptK XPrv, Passphrase "encryption")
-derivePrivateKey ctx wid pwd (role_, ix) = db & \DBLayer{..} -> do
+    -> DerivationIndex
+    -> ExceptT ErrSignMetadataWith IO (k 'ScriptK XPrv, KeyHash, Passphrase "encryption")
+deriveScriptSigningCreds ctx wid pwd ix = db & \DBLayer{..} -> do
     addrIx <- withExceptT ErrSignMetadataWithInvalidIndex $ guardSoftIndex ix
+    let acctIx = minBound
 
-    cp <- mapExceptT atomically
+    -- fixme: make new error type instead of ErrSignMetadataWith
+    _cp <- mapExceptT atomically
         $ withExceptT ErrSignMetadataWithNoSuchWallet
         $ withNoSuchWallet wid
         $ readCheckpoint wid
@@ -2290,10 +2293,8 @@ derivePrivateKey ctx wid pwd (role_, ix) = db & \DBLayer{..} -> do
     withRootKey @ctx @s @k ctx wid pwd ErrSignMetadataWithRootKey
         $ \rootK scheme -> do
             let encPwd = preparePassphrase scheme pwd
-            let DerivationPrefix (_, _, acctIx) = Seq.derivationPrefix (getState cp)
-            let acctK = deriveAccountPrivateKey encPwd rootK acctIx
-            let addrK = deriveAddressPrivateKey encPwd acctK role_ addrIx
-            pure (liftRawKey . getRawKey $ addrK, encPwd)
+            let (scriptK, vkh) = deriveScriptSigningKey encPwd rootK acctIx addrIx
+            pure (scriptK, vkh, encPwd)
   where
     db = ctx ^. dbLayer @IO @s @k
 
