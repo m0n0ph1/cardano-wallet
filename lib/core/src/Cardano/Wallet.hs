@@ -2290,7 +2290,7 @@ derivePrivateKey ctx wid pwd (role_, ix) = db & \DBLayer{..} -> do
     withRootKey @ctx @s @k ctx wid pwd ErrSignMetadataWithRootKey
         $ \rootK scheme -> do
             let encPwd = preparePassphrase scheme pwd
-            let DerivationPrefix (_, _, acctIx) = derivationPrefix (getState cp)
+            let DerivationPrefix (_, _, acctIx) = Seq.derivationPrefix (getState cp)
             let acctK = deriveAccountPrivateKey encPwd rootK acctIx
             let addrK = deriveAddressPrivateKey encPwd acctK role_ addrIx
             pure (liftRawKey . getRawKey $ addrK, encPwd)
