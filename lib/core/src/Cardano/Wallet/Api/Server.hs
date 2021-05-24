@@ -293,7 +293,7 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Passphrase (..)
     , PaymentAddress (..)
     , RewardAccount (..)
-    , Role (MultisigScript)
+    , Role (UtxoExternal)
     , SoftDerivation (..)
     , WalletKey (..)
     , deriveRewardAccount
@@ -320,8 +320,6 @@ import Cardano.Wallet.Primitive.AddressDiscovery
     )
 import Cardano.Wallet.Primitive.AddressDiscovery.Random
     ( RndState, mkRndState )
-import Cardano.Wallet.Primitive.AddressDiscovery.Script
-    ( keyHashFromAccXPubIx )
 import Cardano.Wallet.Primitive.AddressDiscovery.Sequential
     ( DerivationPrefix (..)
     , ParentContext (..)
@@ -347,7 +345,7 @@ import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
     ( SelectionCriteria (..)
     , SelectionError (..)
     , SelectionInsufficientError (..)
-    , SelectionResult (outputsCovered)
+    , SelectionResult (outputsCovered, changeGenerated)
     , UnableToConstructChangeError (..)
     , balanceMissing
     , selectionDelta
@@ -2183,7 +2181,7 @@ migrateWallet ctx withdrawalType (ApiT wid) postData = do
                     }
             (tx, txMeta, txTime, sealedTx) <- liftHandler $
                 W.signTransaction @_ @s @k wrk wid mkRewardAccount pwd txContext
-                    (selection {changeGenerated = []})
+                    (selection {changeGenerated = []}) Nothing
             liftHandler $
                 W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
             liftIO $ mkApiTransaction
@@ -3584,13 +3582,13 @@ forgeToken ctx genChange (ApiT wid) body = do
         --      m/1852(purpose)​/​1815(coin_type)/0(account)​/3/1 -> monetary policy 2
 
         -- Derive a signing key for the monetary policy
-        policyKey <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (MultisigScript, derivationIndex)
+        policyKey <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (UtxoExternal, derivationIndex)
 
         let
           scriptXPub = publicKey $ fst policyKey
 
           vkeyHash :: KeyHash
-          vkeyHash = hashVerificationKey @k MultisigScript $ liftRawKey $ getRawKey scriptXPub
+          vkeyHash = hashVerificationKey @k UtxoExternal $ liftRawKey $ getRawKey scriptXPub
 
           script :: Script KeyHash
           script = RequireSignatureOf vkeyHash
@@ -3618,6 +3616,8 @@ forgeToken ctx genChange (ApiT wid) body = do
         -- liftIO $ putStrLn $ "Starting SEL..."
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx txout (const Prelude.id)
+        sel' <- liftHandler
+            $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
         -- liftIO $ putStrLn $ "Finished SEL"
         -- liftIO $ putStrLn $ show sel
 
@@ -3627,7 +3627,7 @@ forgeToken ctx genChange (ApiT wid) body = do
         --          ) (outputsCovered sel)
 
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just policyKey)
+            $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel' (Just policyKey)
         -- liftIO $ putStrLn $ "Finished SIGN"
         -- liftIO $ putStrLn $ show tx
         liftHandler
