@@ -2845,9 +2845,9 @@ toCardanoAddressScript (Cardano.Api.RequireTimeAfter _ slot) = Cardano.Address.A
 toCardanoAddressScript (Cardano.Api.RequireTimeBefore _ slot) = Cardano.Address.ActiveUntilSlot . fromIntegral . Cardano.Api.unSlotNo $ slot
 
 fromCardanoAddressKeyHash :: Cardano.Address.KeyHash -> Either ErrScriptConversion (Cardano.Api.Hash Cardano.Api.PaymentKey)
-fromCardanoAddressKeyHash (Cardano.Address.KeyHash Cardano.Address.Delegation digest) = Left ErrScriptConversionExpectedPaymentKey
-fromCardanoAddressKeyHash (Cardano.Address.KeyHash Cardano.Address.Payment digest)    =
-  case Crypto.hashFromBytes digest of
+fromCardanoAddressKeyHash (Cardano.Address.KeyHash Cardano.Address.Delegation _) = Left ErrScriptConversionExpectedPaymentKey
+fromCardanoAddressKeyHash (Cardano.Address.KeyHash Cardano.Address.Payment bs)    =
+  case Crypto.hashFromBytes bs of
     Nothing -> Left . ErrScriptConversionHashExpectedSize . fromIntegral $ Crypto.sizeHash (Proxy :: Proxy Crypto.Blake2b_224)
     Just h  -> Right . Cardano.Api.PaymentKeyHash . Shelley.KeyHash $ h
       

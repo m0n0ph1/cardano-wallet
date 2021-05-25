@@ -293,7 +293,7 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
             wdrl
 
 
-    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mForgeOuts []
+    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mForgeOuts scripts
 
     wits <- case (txWitnessTagFor @k) of
         TxWitnessShelleyUTxO -> do
@@ -324,9 +324,15 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
                     Nothing -> []
                     Just (wit, pwd) -> [mkShelleyWitness unsigned (getRawKey wit, pwd)]
 
-              pure $ xs1 <> xs2
+              pure $ xs2
 
-            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> mintBurnWits
+            let
+              scriptWits = case era of
+                ShelleyBasedEraShelley -> []
+                ShelleyBasedEraAllegra -> Cardano.makeScriptWitness . Cardano.ScriptInEra Cardano.SimpleScriptV2InAllegra . Cardano.SimpleScript Cardano.SimpleScriptV2 <$> scripts
+                ShelleyBasedEraMary -> Cardano.makeScriptWitness . Cardano.ScriptInEra Cardano.SimpleScriptV2InMary . Cardano.SimpleScript Cardano.SimpleScriptV2 <$> scripts
+
+            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> mintBurnWits <> scriptWits
 
         TxWitnessByronUTxO{} -> do
             bootstrapWits <- forM (inputsSelected cs) $ \(_, TxOut addr _) -> do
