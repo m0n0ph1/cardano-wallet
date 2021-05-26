@@ -3596,9 +3596,6 @@ forgeToken ctx genChange (ApiT wid) body = do
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
 
-        -- liftIO $ putStrLn $ "Finished SEL"
-        -- liftIO $ putStrLn $ show sel
-
         -- let outputsCovered' = fmap (\txout -> case txout of
         --          (TxOut addr (TokenBundle.TokenBundle coin tokens)) | addr == payAddrXPub && tokens == mempty -> TxOut addr (TokenBundle.TokenBundle coin (TokenMap.singleton assetId assetQty))
         --          otherwise -> txout
@@ -3607,8 +3604,6 @@ forgeToken ctx genChange (ApiT wid) body = do
         (tx, txMeta, txTime, sealedTx) <- liftHandler $
             W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
                 (Just (skey, encPwd)) [script]
-        -- liftIO $ putStrLn $ "Finished SIGN"
-        -- liftIO $ putStrLn $ show tx
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)

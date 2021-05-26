@@ -47,7 +47,9 @@ import Prelude
 
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
+import Cardano.Address.Script (Script(RequireSignatureOf, RequireAllOf, RequireAnyOf, RequireSomeOf, ActiveUntilSlot, ActiveFromSlot), KeyHash)
 import Data.List (nub)
+import Data.Monoid (Sum(Sum), getSum)
 import Cardano.Api
     ( AnyCardanoEra (..)
     , SimpleScript(RequireSignature)
@@ -98,7 +100,7 @@ import Cardano.Wallet.Primitive.Types.TokenQuantity
     ( TokenQuantity(TokenQuantity), unTokenQuantity )
 import Data.String (fromString)
 import Data.Maybe
-    ( fromMaybe )
+    ( fromMaybe, catMaybes )
 import Data.Foldable
     ( asum )
 import Data.Text.Class
@@ -292,7 +294,6 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
             (toRewardAccountRaw . toXPub $ rewardAcnt)
             wdrl
 
-
     unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mForgeOuts scripts
 
     wits <- case (txWitnessTagFor @k) of
@@ -306,33 +307,23 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
                     | otherwise =
                       [mkShelleyWitness unsigned (rewardAcnt, pwdAcnt)]
 
-            mintBurnWits <- do
-              let
-                list :: [(Address, TokenMap)]
-                list = maybe [] (NE.toList) mForgeOuts
-
-                uniqueAddrs :: [Address]
-                uniqueAddrs = nub . fmap fst $ list
-
-              xs1 <- forM uniqueAddrs $ \addr -> do
-                (k, pwd) <- lookupPrivateKey keyFrom addr
-                pure $ mkShelleyWitness unsigned (getRawKey k, pwd)
-
-              xs2 <-
-                pure $
-                  case extraWit of
-                    Nothing -> []
-                    Just (wit, pwd) -> [mkShelleyWitness unsigned (getRawKey wit, pwd)]
-
-              pure $ xs2
+            let
+              scriptSignWit =
+                case extraWit of
+                  Nothing -> []
+                  Just (wit, pwd) -> [mkShelleyWitness unsigned (getRawKey wit, pwd)]
 
             let
-              scriptWits = case era of
-                ShelleyBasedEraShelley -> []
-                ShelleyBasedEraAllegra -> Cardano.makeScriptWitness . Cardano.ScriptInEra Cardano.SimpleScriptV2InAllegra . Cardano.SimpleScript Cardano.SimpleScriptV2 <$> scripts
-                ShelleyBasedEraMary -> Cardano.makeScriptWitness . Cardano.ScriptInEra Cardano.SimpleScriptV2InMary . Cardano.SimpleScript Cardano.SimpleScriptV2 <$> scripts
+              liftScript :: Cardano.SimpleScript Cardano.SimpleScriptV2 -> Maybe (Cardano.ScriptInEra era)
+              liftScript = case era of
+                ShelleyBasedEraShelley -> const Nothing
+                ShelleyBasedEraAllegra -> Just . Cardano.ScriptInEra Cardano.SimpleScriptV2InAllegra . Cardano.SimpleScript Cardano.SimpleScriptV2
+                ShelleyBasedEraMary    -> Just . Cardano.ScriptInEra Cardano.SimpleScriptV2InMary    . Cardano.SimpleScript Cardano.SimpleScriptV2
 
-            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> mintBurnWits <> scriptWits
+              scriptWits :: [Cardano.Witness era]
+              scriptWits = fmap Cardano.makeScriptWitness . catMaybes . fmap liftScript $ scripts
+
+            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> scriptSignWit <> scriptWits
 
         TxWitnessByronUTxO{} -> do
             bootstrapWits <- forM (inputsSelected cs) $ \(_, TxOut addr _) -> do
@@ -780,6 +771,9 @@ estimateTxSize skeleton =
         , txMintBurnInfo
         } = skeleton
 
+    txScript :: Script KeyHash
+    txScript = undefined
+
     numberOf_Inputs
         = fromIntegral txInputCount
 
@@ -788,6 +782,15 @@ estimateTxSize skeleton =
 
     numberOf_Withdrawals
         = if txRewardWithdrawal > Coin 0 then 1 else 0
+
+    -- Each unique asset must be witnessed by the script associated
+    -- with (used to mint) that asset.
+    numberOf_ScriptWitnesses
+      = fromIntegral $ case txMintBurnInfo of
+          Nothing
+            -> 0
+          Just (is :: NE.NonEmpty (Address, TokenMap))
+            -> length $ TokenMap.toFlatList $ foldMap snd is
 
     numberOf_MintBurnVkeyWitnesses
       = fromIntegral $ case txMintBurnInfo of
@@ -1025,7 +1028,7 @@ estimateTxSize skeleton =
     sizeOf_WitnessSet
         = sizeOf_SmallMap
         + sizeOf_VKeyWitnesses
-        + sizeOf_MultisigScript
+        + sizeOf_NativeScript txScript
         + sizeOf_BootstrapWitnesses
       where
         -- ?0 => [* vkeywitness ]
@@ -1034,9 +1037,9 @@ estimateTxSize skeleton =
                 then sizeOf_Array + sizeOf_SmallUInt else 0)
             + sizeOf_VKeyWitness * numberOf_VkeyWitnesses
 
-        -- ?1 => [* multisig_script ]
-        sizeOf_MultisigScript
-            = 0
+        -- ?1 => [* native_script ]
+        sizeOf_NativeScripts [] = 0
+        sizeOf_NativeScripts ss = sizeOf_Array + sizeOf_SmallUInt + sumVia sizeOf_NativeScript ss
 
         -- ?2 => [* bootstrap_witness ]
         sizeOf_BootstrapWitnesses
@@ -1069,6 +1072,27 @@ estimateTxSize skeleton =
       where
         sizeOf_ChainCode  = 34
         sizeOf_Attributes = 45 -- NOTE: could be smaller by ~34 for Icarus
+
+    -- native_script =
+    --   [ script_pubkey      = (0, addr_keyhash)
+    --   // script_all        = (1, [ * native_script ])
+    --   // script_any        = (2, [ * native_script ])
+    --   // script_n_of_k     = (3, n: uint, [ * native_script ])
+    --   // invalid_before    = (4, uint)
+    --      ; Timelock validity intervals are half-open intervals [a, b).
+    --      ; This field specifies the left (included) endpoint a.
+    --   // invalid_hereafter = (5, uint)
+    --      ; Timelock validity intervals are half-open intervals [a, b).
+    --      ; This field specifies the right (excluded) endpoint b.
+    --   ]
+    sizeOf_NativeScript script =
+      case script of
+        (RequireSignatureOf _) -> sizeOf_SmallUInt + sizeOf_Hash28
+        (RequireAllOf ss)      -> sizeOf_SmallUInt + sizeOf_Array + sumVia sizeOf_NativeScript ss
+        (RequireAnyOf ss)      -> sizeOf_SmallUInt + sizeOf_Array + sumVia sizeOf_NativeScript ss
+        (RequireSomeOf _ ss)   -> sizeOf_SmallUInt + sizeOf_UInt + sizeOf_Array + sumVia sizeOf_NativeScript ss
+        (ActiveFromSlot _)     -> sizeOf_SmallUInt + sizeOf_UInt
+        (ActiveUntilSlot _)    -> sizeOf_SmallUInt + sizeOf_UInt
 
     -- A Blake2b-224 hash, resulting in a 28-byte digest wrapped in CBOR, so
     -- with 2 bytes overhead (length <255, but length > 23)
@@ -1113,6 +1137,9 @@ estimateTxSize skeleton =
     -- have up to 65536 elements.
     sizeOf_SmallArray = 1
     sizeOf_Array = 3
+
+sumVia :: (Foldable t, Num m) => (a -> m) -> t a -> m
+sumVia f = getSum . foldMap (Sum . f)
 
 lookupPrivateKey
     :: (Address -> Maybe (k 'AddressK XPrv, Passphrase "encryption"))
