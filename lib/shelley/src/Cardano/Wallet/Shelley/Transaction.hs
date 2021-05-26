@@ -48,8 +48,9 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
 import Cardano.Address.Script (Script(RequireSignatureOf, RequireAllOf, RequireAnyOf, RequireSomeOf, ActiveUntilSlot, ActiveFromSlot), KeyHash)
-import Data.List (nub)
+import Data.List 
 import Data.Monoid (Sum(Sum), getSum)
+import Data.Semigroup (Max(Max), getMax)
 import Cardano.Api
     ( AnyCardanoEra (..)
     , SimpleScript(RequireSignature)
@@ -771,8 +772,8 @@ estimateTxSize skeleton =
         , txMintBurnInfo
         } = skeleton
 
-    txScript :: Script KeyHash
-    txScript = undefined
+    txScripts :: [Script KeyHash]
+    txScripts = undefined
 
     numberOf_Inputs
         = fromIntegral txInputCount
@@ -783,25 +784,38 @@ estimateTxSize skeleton =
     numberOf_Withdrawals
         = if txRewardWithdrawal > Coin 0 then 1 else 0
 
-    -- Each unique asset must be witnessed by the script associated
-    -- with (used to mint) that asset.
-    numberOf_ScriptWitnesses
-      = fromIntegral $ case txMintBurnInfo of
-          Nothing
-            -> 0
-          Just (is :: NE.NonEmpty (Address, TokenMap))
-            -> length $ TokenMap.toFlatList $ foldMap snd is
-
-    numberOf_MintBurnVkeyWitnesses
-      = fromIntegral $ case txMintBurnInfo of
-          Nothing
-            -> 0
+    numberOf_ScriptVKeyWitnesses
+      = fromIntegral $ case txScripts of
+          Nothing -> 0
           -- Count the (unique) addresses that will need to mint/burn
           -- some tokens, and hence must sign the transaction (i.e. be
           -- a witness). Unique because someone minting/burning
           -- multiple assets need only sign the transaction once.
-          Just (is :: NE.NonEmpty (Address, TokenMap))
-            -> length . NE.nub . fmap fst $ is
+          Just (ss :: NE.NonEmpty (Script KeyHash))
+            -> sumVia scriptRequiredKeySigs ss
+
+    scriptRequiredKeySigs :: (Bounded num, Ord num, Num num) => Script KeyHash -> num 
+    scriptRequiredKeySigs (RequireSignatureOf _) = 1
+    scriptRequiredKeySigs (RequireAllOf ss)      = sumVia scriptRequiredKeySigs ss
+    scriptRequiredKeySigs (RequireAnyOf ss)      = sumVia scriptRequiredKeySigs ss
+    scriptRequiredKeySigs (ActiveFromSlot _)     = 0
+    scriptRequiredKeySigs (ActiveUntilSlot _)    = 0
+    -- We don't know how many the user will sign with, so we just assume the worst case of "signs with all".
+    scriptRequiredKeySigs (RequireSomeOf _ ss)   = sumVia scriptRequiredKeySigs ss
+
+      -- case length ss of
+      --   -- Requiring more scripts than we have, tx submission will fail anyway, but let's just give the most generous estimate we can
+      --   -- Or, number required == number we have, so just return sum
+      --   numScr | numScr <= fromIntegral required -> sumVia scriptRequiredKeySigs ss
+      --   -- Otherwise,
+      --   numScr | numScr > fromIntegral required  ->
+      --            ss
+      --            -- get subsets of length 'required'
+      --            & subsets required
+      --            -- Sum the keys required for each subset
+      --            & fmap (sumVia scriptRequiredKeySigs)
+      --            -- Choose the subset with the maximum number of keys required (i.e. the worst-case)
+      --            & maxVia id
 
     numberOf_VkeyWitnesses
         = case txWitnessTag of
@@ -810,7 +824,7 @@ estimateTxSize skeleton =
                 numberOf_Inputs
                 + numberOf_Withdrawals
                 + numberOf_CertificateSignatures
-                + numberOf_MintBurnVkeyWitnesses
+                + numberOf_ScriptVkeyWitnesses
 
     numberOf_BootstrapWitnesses
         = case txWitnessTag of
@@ -1028,7 +1042,7 @@ estimateTxSize skeleton =
     sizeOf_WitnessSet
         = sizeOf_SmallMap
         + sizeOf_VKeyWitnesses
-        + sizeOf_NativeScript txScript
+        + sizeOf_NativeScripts txScripts
         + sizeOf_BootstrapWitnesses
       where
         -- ?0 => [* vkeywitness ]
@@ -1140,6 +1154,8 @@ estimateTxSize skeleton =
 
 sumVia :: (Foldable t, Num m) => (a -> m) -> t a -> m
 sumVia f = getSum . foldMap (Sum . f)
+
+maxVia f = getMax . foldMap (Max . f)
 
 lookupPrivateKey
     :: (Address -> Maybe (k 'AddressK XPrv, Passphrase "encryption"))
@@ -1377,3 +1393,18 @@ mkByronWitness (Cardano.ShelleyTxBody era body _) nw addr encryptedKey =
     addrAttr = Byron.mkAttributes $ Byron.AddrAttributes
         (toHDPayloadAddress addr)
         (Byron.toByronNetworkMagic nw)
+
+-- https://stackoverflow.com/a/52602906
+-- Every set contains a unique empty subset.
+subsets 0 _ = [[]]
+
+-- Empty sets don't have any (non-empty) subsets.
+subsets _ [] = []
+
+-- Otherwise we're dealing with non-empty subsets of a non-empty set.
+-- If the first element of the set is x, we can get subsets of size n by either:
+--   - getting subsets of size n-1 of the remaining set xs and adding x to each of them
+--     (those are all subsets containing x), or
+--   - getting subsets of size n of the remaining set xs
+--     (those are all subsets not containing x)
+subsets n (x : xs) = map (x :) (subsets (n - 1) xs) ++ subsets n xs
