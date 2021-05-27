@@ -3587,6 +3587,7 @@ forgeToken ctx genChange (ApiT wid) body = do
                 , txMetadata = md
                 , txTimeToLive = ttl
                 , txMintBurnInfo = Just (pure (addr, assets) :: NonEmpty (Address, TokenMap.TokenMap))
+                , txScripts = [script]
                 }
 
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid

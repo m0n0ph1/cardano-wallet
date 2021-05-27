@@ -697,7 +697,7 @@ data TxSkeleton = TxSkeleton
     , txInputCount :: !Int
     , txOutputs :: ![TxOut]
     , txChange :: ![Set AssetId]
-    , txMintBurnInfo :: !(Maybe (NE.NonEmpty (Address, TokenMap)))
+    , txScripts :: [Script KeyHash]
     }
     deriving (Eq, Show)
 
@@ -714,7 +714,7 @@ emptyTxSkeleton txWitnessTag = TxSkeleton
     , txInputCount = 0
     , txOutputs = []
     , txChange = []
-    , txMintBurnInfo = Nothing
+    , txScripts = []
     }
 
 -- | Constructs a transaction skeleton from wallet primitive types.
@@ -735,7 +735,7 @@ mkTxSkeleton witness context skeleton = TxSkeleton
     , txInputCount = view #skeletonInputCount skeleton
     , txOutputs = view #skeletonOutputs skeleton
     , txChange = view #skeletonChange skeleton
-    , txMintBurnInfo = view #txMintBurnInfo context
+    , txScripts = view #txScripts context
     }
 
 -- | Estimates the final cost of a transaction based on its skeleton.
@@ -769,11 +769,8 @@ estimateTxSize skeleton =
         , txInputCount
         , txOutputs
         , txChange
-        , txMintBurnInfo
+        , txScripts
         } = skeleton
-
-    txScripts :: [Script KeyHash]
-    txScripts = undefined
 
     numberOf_Inputs
         = fromIntegral txInputCount
@@ -784,17 +781,11 @@ estimateTxSize skeleton =
     numberOf_Withdrawals
         = if txRewardWithdrawal > Coin 0 then 1 else 0
 
-    numberOf_ScriptVKeyWitnesses
-      = fromIntegral $ case txScripts of
-          Nothing -> 0
-          -- Count the (unique) addresses that will need to mint/burn
-          -- some tokens, and hence must sign the transaction (i.e. be
-          -- a witness). Unique because someone minting/burning
-          -- multiple assets need only sign the transaction once.
-          Just (ss :: NE.NonEmpty (Script KeyHash))
-            -> sumVia scriptRequiredKeySigs ss
+    -- Total number of signatures the scripts require
+    numberOf_ScriptVkeyWitnesses
+      = sumVia scriptRequiredKeySigs txScripts
 
-    scriptRequiredKeySigs :: (Bounded num, Ord num, Num num) => Script KeyHash -> num 
+    scriptRequiredKeySigs :: Num num => Script KeyHash -> num 
     scriptRequiredKeySigs (RequireSignatureOf _) = 1
     scriptRequiredKeySigs (RequireAllOf ss)      = sumVia scriptRequiredKeySigs ss
     scriptRequiredKeySigs (RequireAnyOf ss)      = sumVia scriptRequiredKeySigs ss
@@ -802,20 +793,6 @@ estimateTxSize skeleton =
     scriptRequiredKeySigs (ActiveUntilSlot _)    = 0
     -- We don't know how many the user will sign with, so we just assume the worst case of "signs with all".
     scriptRequiredKeySigs (RequireSomeOf _ ss)   = sumVia scriptRequiredKeySigs ss
-
-      -- case length ss of
-      --   -- Requiring more scripts than we have, tx submission will fail anyway, but let's just give the most generous estimate we can
-      --   -- Or, number required == number we have, so just return sum
-      --   numScr | numScr <= fromIntegral required -> sumVia scriptRequiredKeySigs ss
-      --   -- Otherwise,
-      --   numScr | numScr > fromIntegral required  ->
-      --            ss
-      --            -- get subsets of length 'required'
-      --            & subsets required
-      --            -- Sum the keys required for each subset
-      --            & fmap (sumVia scriptRequiredKeySigs)
-      --            -- Choose the subset with the maximum number of keys required (i.e. the worst-case)
-      --            & maxVia id
 
     numberOf_VkeyWitnesses
         = case txWitnessTag of
@@ -1154,8 +1131,6 @@ estimateTxSize skeleton =
 
 sumVia :: (Foldable t, Num m) => (a -> m) -> t a -> m
 sumVia f = getSum . foldMap (Sum . f)
-
-maxVia f = getMax . foldMap (Max . f)
 
 lookupPrivateKey
     :: (Address -> Maybe (k 'AddressK XPrv, Passphrase "encryption"))

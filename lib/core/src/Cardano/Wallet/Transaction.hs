@@ -36,6 +36,7 @@ module Cardano.Wallet.Transaction
 
 import Prelude
 
+import Cardano.Address.Script (Script, KeyHash)
 import Cardano.Address.Derivation
     ( XPrv )
 import Cardano.Api
@@ -157,6 +158,7 @@ data TransactionCtx = TransactionCtx
     -- ^ An additional delegation to take.
     , txMintBurnInfo :: Maybe (NonEmpty (Address, TokenMap))
     -- ^ Mint/burn transactions.
+    , txScripts :: [Script KeyHash]
     } deriving (Show, Generic, Eq)
 
 data Withdrawal
@@ -180,6 +182,7 @@ defaultTransactionCtx = TransactionCtx
     , txTimeToLive = maxBound
     , txDelegationAction = Nothing
     , txMintBurnInfo = Nothing
+    , txScripts = []
     }
 
 -- | Whether the user is attempting any particular delegation action.
