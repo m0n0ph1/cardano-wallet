@@ -324,7 +324,7 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
               scriptWits :: [Cardano.Witness era]
               scriptWits = fmap Cardano.makeScriptWitness . catMaybes . fmap liftScript $ scripts
 
-            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> scriptSignWit <> scriptWits
+            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> scriptWits <> scriptSignWit 
 
         TxWitnessByronUTxO{} -> do
             bootstrapWits <- forM (inputsSelected cs) $ \(_, TxOut addr _) -> do
@@ -698,6 +698,7 @@ data TxSkeleton = TxSkeleton
     , txOutputs :: ![TxOut]
     , txChange :: ![Set AssetId]
     , txScripts :: [Script KeyHash]
+    , txMintAssets :: [AssetId]
     }
     deriving (Eq, Show)
 
@@ -715,6 +716,7 @@ emptyTxSkeleton txWitnessTag = TxSkeleton
     , txOutputs = []
     , txChange = []
     , txScripts = []
+    , txMintAssets = []
     }
 
 -- | Constructs a transaction skeleton from wallet primitive types.
@@ -736,6 +738,7 @@ mkTxSkeleton witness context skeleton = TxSkeleton
     , txOutputs = view #skeletonOutputs skeleton
     , txChange = view #skeletonChange skeleton
     , txScripts = view #txScripts context
+    , txMintAssets = maybe [] (fmap fst . TokenMap.toFlatList . foldMap snd) $ view #txMintBurnInfo context
     }
 
 -- | Estimates the final cost of a transaction based on its skeleton.
@@ -770,6 +773,7 @@ estimateTxSize skeleton =
         , txOutputs
         , txChange
         , txScripts
+        , txMintAssets
         } = skeleton
 
     numberOf_Inputs
@@ -828,6 +832,8 @@ estimateTxSize skeleton =
     --   , ? 5 : withdrawals
     --   , ? 6 : update
     --   , ? 7 : metadata_hash
+    --   , ? 8 : uint ; validity interval start
+    --   , ? 9 : mint
     --   }
     sizeOf_TransactionBody
         = sizeOf_SmallMap
@@ -839,6 +845,8 @@ estimateTxSize skeleton =
         + sizeOf_Withdrawals
         + sizeOf_Update
         + sizeOf_MetadataHash
+        + sizeOf_ValidityIntervalStart
+        + sumVia sizeOf_Mint txMintAssets
       where
         -- 0 => set<transaction_input>
         sizeOf_Inputs
@@ -897,6 +905,21 @@ estimateTxSize skeleton =
         sizeOf_MetadataHash
             = maybe 0 (const (sizeOf_SmallUInt + sizeOf_Hash32)) txMetadata
 
+        -- ?8 => uint ; validity interval start
+        sizeOf_ValidityIntervalStart
+          = sizeOf_UInt
+
+        -- ?9 => mint = multiasset<int64>
+        -- multiasset<a> = { * policy_id => { * asset_name => a } }
+        -- policy_id = scripthash
+        -- asset_name = bytes .size (0..32)
+        sizeOf_Mint AssetId{tokenName}
+          = sizeOf_SmallMap -- NOTE: Assuming < 23 policies per output
+          + sizeOf_Hash28
+          + sizeOf_SmallMap -- NOTE: Assuming < 23 assets per policy
+          + sizeOf_AssetName tokenName
+          + sizeOf_LargeInt
+
     -- For metadata, we can't choose a reasonable upper bound, so it's easier to
     -- measure the serialize data since we have it anyway. When it's "empty",
     -- metadata are represented by a special "null byte" in CBOR `F6`.
@@ -921,8 +944,7 @@ estimateTxSize skeleton =
         + sizeOf_Address address
         + sizeOf_SmallArray
         + sizeOf_Coin (TokenBundle.getCoin tokens)
-        + F.foldl' (\t -> (t +) . sizeOf_NativeAsset) 0
-            (TokenBundle.getAssets tokens)
+        + sumVia sizeOf_NativeAsset (TokenBundle.getAssets tokens)
 
     -- transaction_output =
     --   [address, amount : value]
@@ -933,7 +955,7 @@ estimateTxSize skeleton =
         + sizeOf_ChangeAddress
         + sizeOf_SmallArray
         + sizeOf_LargeUInt
-        + F.foldl' (\t -> (t +) . sizeOf_NativeAsset) 0 xs
+        + sumVia sizeOf_NativeAsset xs
 
     -- stake_registration =
     --   (0, stake_credential)
@@ -1116,6 +1138,11 @@ estimateTxSize skeleton =
     sizeOf_UInt = 5
     sizeOf_LargeUInt = 9
 
+    -- A CBOR Int which is less than 23 in value fits on a single byte. Beyond,
+    -- the first byte is used to encode the number of bytes necessary to encode
+    -- the number itself, followed by the number itself.
+    sizeOf_LargeInt = 9
+
     -- A CBOR array with less than 23 elements, fits on a single byte, followed
     -- by each key-value pair (encoded as two concatenated CBOR elements).
     sizeOf_SmallMap = 1
@@ -1130,7 +1157,7 @@ estimateTxSize skeleton =
     sizeOf_Array = 3
 
 sumVia :: (Foldable t, Num m) => (a -> m) -> t a -> m
-sumVia f = getSum . foldMap (Sum . f)
+sumVia f = F.foldl' (\t -> (t +) . f) 0
 
 lookupPrivateKey
     :: (Address -> Maybe (k 'AddressK XPrv, Passphrase "encryption"))
@@ -1287,14 +1314,15 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeOuts scripts =
                 (Cardano.TxMetadataInEra Cardano.TxMetadataInMaryEra)
                 md
 
-        , Cardano.txAuxScripts = case scripts of
-            [] -> Cardano.TxAuxScriptsNone
-            xs -> Cardano.TxAuxScripts Cardano.AuxScriptsInMaryEra ((Cardano.ScriptInEra Cardano.SimpleScriptV2InMary . Cardano.SimpleScript Cardano.SimpleScriptV2) <$> xs)
+        , Cardano.txAuxScripts = Cardano.TxAuxScriptsNone
+          -- case scripts of
+          --   [] -> Cardano.TxAuxScriptsNone
+          --   xs -> Cardano.TxAuxScripts Cardano.AuxScriptsInMaryEra ((Cardano.ScriptInEra Cardano.SimpleScriptV2InMary . Cardano.SimpleScript Cardano.SimpleScriptV2) <$> xs)
 
         , Cardano.txUpdateProposal =
             Cardano.TxUpdateProposalNone
 
-        , Cardano.txMintValue = 
+        , Cardano.txMintValue =
             let
               forgeOutAmt :: Cardano.TxOut Cardano.MaryEra -> Cardano.Value
               forgeOutAmt (Cardano.TxOut _addr (Cardano.TxOutAdaOnly _ _)) = mempty
