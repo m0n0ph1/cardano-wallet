@@ -1023,27 +1023,6 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
 
     it "TRANS_MINT_01 - Mint tokens" $ \ctx -> runResourceT $ do
       w <- fixtureWallet ctx
-      
-      -- let
-      --   bod :: Cardano.TxBody Cardano.MaryEra
-      --   bod =
-      --     either (error . show) Prelude.id $ Cardano.makeTransactionBody $ Cardano.TxBodyContent
-      --       { Cardano.txIns = []
-      --       , Cardano.txOuts = []
-      --       , Cardano.txWithdrawals = Cardano.TxWithdrawalsNone
-      --       , Cardano.txCertificates = Cardano.TxCertificatesNone
-      --       , Cardano.txFee = Cardano.TxFeeExplicit Cardano.TxFeesExplicitInMaryEra mempty
-      --       , Cardano.txValidityRange = 
-      --           ( Cardano.TxValidityNoLowerBound
-      --           , Cardano.TxValidityNoUpperBound Cardano.ValidityNoUpperBoundInMaryEra
-      --           )
-      --       , Cardano.txMetadata = Cardano.TxMetadataNone
-      --       , Cardano.txAuxScripts = Cardano.TxAuxScriptsNone
-      --       , Cardano.txUpdateProposal = Cardano.TxUpdateProposalNone
-      --       , Cardano.txMintValue = Cardano.TxMintNone
-      --       }
-
-      -- liftIO $ putStrLn $ show bod
 
       addrs <- listAddresses @n ctx w
       let destination = (addrs !! 1) ^. #id
@@ -1068,6 +1047,51 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
       verify r2
         [ expectSuccess
         , expectListSizeSatisfy (> 0)
+        ]
+
+    it "TRANS_MINT_BURN_01 - Mint then burn tokens" $ \ctx -> runResourceT $ do
+      w <- fixtureWallet ctx
+
+      addrs <- listAddresses @n ctx w
+      let destination = (addrs !! 1) ^. #id
+      let mintPayload = Json [json|{
+                              "address": #{destination},
+                              "mint_amount": {
+                                  "quantity": 5,
+                                  "unit": "assets"
+                              },
+                              "monetary_policy_index": "0",
+                              "passphrase": #{fixturePassphrase},
+                              "asset_name": "aaaa"
+                   }|]
+
+      r1 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default mintPayload
+
+      verify r1
+        [ expectResponseCode HTTP.status202
+        ]
+
+      let burnPayload = Json [json|{
+                              "address": #{destination},
+                              "burn_amount": {
+                                  "quantity": 5,
+                                  "unit": "assets"
+                              },
+                              "monetary_policy_index": "0",
+                              "passphrase": #{fixturePassphrase},
+                              "asset_name": "aaaa"
+                   }|]
+
+      r2 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default burnPayload
+
+      verify r2
+        [ expectResponseCode HTTP.status202
+        ]
+
+      r3 <- request @([ApiAsset]) ctx (Link.listAssets w) Default Empty
+      verify r3
+        [ expectSuccess
+        , expectListSizeSatisfy (== 0)
         ]
       
     it "TRANSMETA_CREATE_01 - Transaction with metadata" $ \ctx -> runResourceT $ do

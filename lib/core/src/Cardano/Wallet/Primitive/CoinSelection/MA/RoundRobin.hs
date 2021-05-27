@@ -175,6 +175,9 @@ data SelectionCriteria = SelectionCriteria
     , mintInputs
         :: !TokenMap
         -- ^ When a token is minted, it provides an extra source of tokens.
+    , burnInputs
+        :: !TokenMap
+        -- ^ When a token is burned, it provides an extra sink of tokens.
     }
     deriving (Eq, Show)
 
@@ -449,6 +452,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
         , selectionLimit
         , extraCoinSource
         , mintInputs
+        , burnInputs
         } = criteria
 
     mkInputsSelected :: UTxOIndex -> NonEmpty (TxIn, TxOut)
@@ -459,7 +463,11 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
     balanceAvailable = fullBalance utxoAvailable extraCoinSource mintInputs
 
     balanceRequired :: TokenBundle
-    balanceRequired = F.foldMap (view #tokens) outputsToCover
+    balanceRequired =
+      fromMaybe mempty
+        $ F.foldMap (view #tokens) outputsToCover
+          `TokenBundle.subtract`
+            (TokenBundle.fromTokenMap burnInputs)
 
     insufficientMinCoinValues :: [InsufficientMinCoinValueError]
     insufficientMinCoinValues =
@@ -1353,11 +1361,9 @@ fullBalance index extraSource mintInputs
     | UTxOIndex.null index =
         TokenBundle.empty
     | otherwise =
-        TokenBundle.add
-          (TokenBundle.add
-              (view #balance index)
-              (maybe TokenBundle.empty TokenBundle.fromCoin extraSource))
-          (TokenBundle.fromTokenMap mintInputs)
+        (view #balance index)
+          `TokenBundle.add` (maybe TokenBundle.empty TokenBundle.fromCoin extraSource)
+          `TokenBundle.add` (TokenBundle.fromTokenMap mintInputs)
 
 --------------------------------------------------------------------------------
 -- Utility types

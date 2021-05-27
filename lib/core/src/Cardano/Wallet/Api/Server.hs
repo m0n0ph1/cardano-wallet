@@ -3586,7 +3586,7 @@ forgeToken ctx genChange (ApiT wid) body = do
                 { txWithdrawal = wdrl
                 , txMetadata = md
                 , txTimeToLive = ttl
-                , txMintBurnInfo = Just (pure (addr, assets) :: NonEmpty (Address, TokenMap.TokenMap))
+                , txMintBurnInfo = (Just (pure (addr, assets) :: NonEmpty (Address, TokenMap.TokenMap)), Nothing)
                 , txScripts = [script]
                 }
 
