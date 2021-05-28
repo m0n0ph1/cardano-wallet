@@ -551,6 +551,7 @@ import qualified Cardano.Wallet.Primitive.AddressDerivation.Icarus as Icarus
 import qualified Cardano.Wallet.Primitive.Types as W
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
+import qualified Cardano.Wallet.MintBurn as MintBurn
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import qualified Cardano.Wallet.Primitive.Types.Tx as W
 import qualified Cardano.Wallet.Primitive.Types.UTxO as UTxO
@@ -3542,12 +3543,14 @@ forgeToken
     -> Handler (ApiTransaction n)
 forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
-    let assetName = body ^. #assetName . #getApiT
-    let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
-    let derivationIndex = maybe (DerivationIndex 0) getApiT $ body ^. #monetaryPolicyIndex
+    -- let assetName = body ^. #assetName . #getApiT
+    -- let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
+    -- let derivationIndex = maybe (DerivationIndex 0) getApiT $ body ^. #monetaryPolicyIndex
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
-    let (ApiT addr, _) = body ^. #address
+    -- let (ApiT addr, _) = body ^. #address
+
+    let mintBurnReq = MintBurn.fromApiMintBurnData $ body ^. #mintBurn
 
     (wdrl, mkRwdAcct) <-
         mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
@@ -3564,47 +3567,27 @@ forgeToken ctx genChange (ApiT wid) body = do
         --      m/1852(purpose)​/​1815(coin_type)/0(account)​/3/1 -> monetary policy 2
 
         -- Derive a signing key for the monetary policy
-        (skey, vkeyHash, encPwd) <- liftHandler $ W.deriveScriptSigningCreds @_ @s @k @n wrk wid pwd derivationIndex
-
-        let
-          script :: Script KeyHash
-          script = RequireSignatureOf vkeyHash
-
-          policyId :: TokenPolicyId
-          policyId = tokenPolicyIdFromScript script
-
-          assetId :: AssetId
-          assetId = AssetId policyId assetName
-
-        -- Transfer the minted assets to the payment address
-        -- associated with the monetary policy
-        let assets = TokenMap.singleton assetId assetQty
-        let txout = (TxOut addr (TokenBundle.TokenBundle (Coin 0) assets)) NE.:| []
-        -- let outs = fmap (\(TxOut addr (TokenBundle.TokenBundle coin tokens)) -> TxOut addr (TokenBundle.TokenBundle coin mempty)) (pure txout)
+        mintBurnData <- liftHandler $
+          MintBurn.enrich (W.deriveScriptSigningCreds @_ @s @k @n wrk wid pwd) mintBurnReq
 
         let txCtx = defaultTransactionCtx
                 { txWithdrawal = wdrl
                 , txMetadata = md
                 , txTimeToLive = ttl
-                , txMintBurnInfo = (Just (pure (addr, assets) :: NonEmpty (Address, TokenMap.TokenMap)), Nothing)
-                , txScripts = [script]
+                , txMintBurnInfo = MintBurn.tmpGetAddrMap mintBurnData
+                , txScripts = [MintBurn.getMintBurnScript mintBurnData]
                 }
 
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
-        -- liftIO $ putStrLn $ "Starting SEL..."
-        sel <- liftHandler
-            $ W.selectAssets @_ @s @k wrk w txCtx txout (const Prelude.id)
+        sel <- liftHandler $ case MintBurn.getTxOuts mintBurnData of
+                 []     -> W.selectAssetsNoOutputs @_ @s @k wrk wid w txCtx (const Prelude.id)
+                 tx:txs -> W.selectAssets @_ @s @k wrk w txCtx (tx NE.:| txs) (const Prelude.id)
         sel' <- liftHandler
             $ W.assignChangeAddressesAndUpdateDb wrk wid genChange sel
 
-        -- let outputsCovered' = fmap (\txout -> case txout of
-        --          (TxOut addr (TokenBundle.TokenBundle coin tokens)) | addr == payAddrXPub && tokens == mempty -> TxOut addr (TokenBundle.TokenBundle coin (TokenMap.singleton assetId assetQty))
-        --          otherwise -> txout
-        --          ) (outputsCovered sel)
-
         (tx, txMeta, txTime, sealedTx) <- liftHandler $
             W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txCtx sel'
-                (Just (skey, encPwd)) [script]
+                (Just $ MintBurn.getSigningKey mintBurnData) [MintBurn.getMintBurnScript mintBurnData]
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)

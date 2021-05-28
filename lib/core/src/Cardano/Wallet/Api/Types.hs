@@ -66,10 +66,12 @@ module Cardano.Wallet.Api.Types
     , ApiSelectCoinsPayments (..)
     , ApiSelectCoinsAction (..)
     , ApiCoinSelection (..)
+    , ApiMintBurnOperation (..)
     , ApiCoinSelectionChange (..)
     , ApiCoinSelectionInput (..)
     , ApiCoinSelectionOutput (..)
     , ApiCoinSelectionWithdrawal (..)
+    , ApiMintBurnData (..)
     , ApiRawMetadata (..)
     , ApiStakePool (..)
     , ApiStakePoolMetrics (..)
@@ -2924,10 +2926,7 @@ instance ToJSON (ApiT SmashServer) where
 -------------------------------------------------------------------------------}
 
 data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
-    { address :: !(ApiT Address, Proxy n)
-    , assetName :: !(ApiT W.TokenName)
-    , mintAmount :: !(Quantity "assets" Natural)
-    , monetaryPolicyIndex :: !(Maybe (ApiT DerivationIndex))
+    { mintBurn :: !(ApiMintBurnData n)
     , passphrase :: !(ApiT (Passphrase "lenient"))
     , metadata :: !(Maybe (ApiT TxMetadata))
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
@@ -2938,3 +2937,38 @@ instance DecodeAddress n => FromJSON (ForgeTokenData n) where
 
 instance EncodeAddress n => ToJSON (ForgeTokenData n) where
     toJSON = genericToJSON defaultRecordTypeOptions
+
+data ApiMintBurnData (n :: NetworkDiscriminant) = ApiMintBurnData
+  { monetaryPolicyIndex :: !(Maybe (ApiT DerivationIndex))
+  , tokenName           :: !(ApiT W.TokenName)
+  , mintBurnOperation   :: !(ApiMintBurnOperation n)
+  } deriving (Eq, Generic, Show)
+
+instance DecodeAddress n => FromJSON (ApiMintBurnData n) where
+    parseJSON = genericParseJSON defaultRecordTypeOptions
+
+instance EncodeAddress n => ToJSON (ApiMintBurnData n) where
+    toJSON = genericToJSON defaultRecordTypeOptions
+
+data ApiMintBurnOperation (n :: NetworkDiscriminant)
+  = ApiMint [((ApiT Address, Proxy n), Quantity "assets" Natural)]
+  | ApiBurn (Quantity "assets" Natural)
+  | ApiBoth [((ApiT Address, Proxy n), Quantity "assets" Natural)] (Quantity "assets" Natural)
+  deriving (Eq, Generic, Show)
+
+instance EncodeAddress n => ToJSON (ApiMintBurnOperation n) where
+  toJSON (ApiMint mints) = Aeson.Object $ HM.singleton "mint" (toJSON mints)
+  toJSON (ApiBurn burn)  = Aeson.Object $ HM.singleton "burn" (toJSON burn)
+  toJSON (ApiBoth mints burn) = Aeson.Object $ HM.fromList [ ("mint", toJSON mints)
+                                                           , ("burn", toJSON burn)
+                                                           ]
+
+instance DecodeAddress n => FromJSON (ApiMintBurnOperation n) where
+  parseJSON = Aeson.withObject "ApiMintBurnOperation" $ \o -> do
+    mMints <- o .:? "mint" 
+    mBurn  <- o .:? "burn" 
+    case (mMints, mBurn) of
+      (Nothing    , Nothing)   -> fail "Must include a mint or burn operation"
+      (Just mints , Nothing)   -> pure $ ApiMint mints
+      (Nothing    , Just burn) -> pure $ ApiBurn burn 
+      (Just mints , Just burn) -> pure $ ApiBoth mints burn

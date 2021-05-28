@@ -2290,7 +2290,7 @@ deriveScriptSigningCreds
     -> WalletId
     -> Passphrase "raw"
     -> DerivationIndex
-    -> ExceptT ErrSignMetadataWith IO (k 'ScriptK XPrv, KeyHash, Passphrase "encryption")
+    -> ExceptT ErrSignMetadataWith IO (k 'ScriptK XPrv, Passphrase "encryption")
 deriveScriptSigningCreds ctx wid pwd ix = db & \DBLayer{..} -> do
     addrIx <- withExceptT ErrSignMetadataWithInvalidIndex $ guardSoftIndex ix
     let acctIx = minBound
@@ -2304,8 +2304,8 @@ deriveScriptSigningCreds ctx wid pwd ix = db & \DBLayer{..} -> do
     withRootKey @ctx @s @k ctx wid pwd ErrSignMetadataWithRootKey
         $ \rootK scheme -> do
             let encPwd = preparePassphrase scheme pwd
-            let (scriptK, vkh) = deriveScriptSigningKey encPwd rootK acctIx addrIx
-            pure (scriptK, vkh, encPwd)
+            let (scriptK, _) = deriveScriptSigningKey encPwd rootK acctIx addrIx
+            pure (scriptK, encPwd)
   where
     db = ctx ^. dbLayer @IO @s @k
 

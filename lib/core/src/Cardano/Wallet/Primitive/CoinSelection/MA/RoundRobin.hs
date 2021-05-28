@@ -177,7 +177,7 @@ data SelectionCriteria = SelectionCriteria
         -- ^ When a token is minted, it provides an extra source of tokens.
     , burnInputs
         :: !TokenMap
-        -- ^ When a token is burned, it provides an extra sink of tokens.
+        -- ^ When a token is burned, it increases the balance required, as we must find tokens to burn.
     }
     deriving (Eq, Show)
 
@@ -464,10 +464,9 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
 
     balanceRequired :: TokenBundle
     balanceRequired =
-      fromMaybe mempty
-        $ F.foldMap (view #tokens) outputsToCover
-          `TokenBundle.subtract`
-            (TokenBundle.fromTokenMap burnInputs)
+      F.foldMap (view #tokens) outputsToCover
+        `TokenBundle.add`
+          (TokenBundle.fromTokenMap burnInputs)
 
     insufficientMinCoinValues :: [InsufficientMinCoinValueError]
     insufficientMinCoinValues =

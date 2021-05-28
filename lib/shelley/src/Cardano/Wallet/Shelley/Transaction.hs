@@ -284,7 +284,7 @@ mkTx
     -- ^ Finalized asset selection
     -> Coin
     -- ^ Explicit fee amount
-    -> (Maybe (NE.NonEmpty (Address, TokenMap)), Maybe (NE.NonEmpty (Address, TokenMap)))
+    -> (Maybe (NE.NonEmpty (Address, TokenMap)), Maybe TokenMap)
     -> Maybe (k 'ScriptK XPrv, Passphrase "encryption")
     -> [Cardano.SimpleScript Cardano.SimpleScriptV2]
     -> ShelleyBasedEra era
@@ -545,8 +545,8 @@ _initSelectionCriteria pp ctx utxoAvailable outputsUnprepared
 
     burnInputs :: TokenMap
     burnInputs = case view #txMintBurnInfo ctx of
-      (_, Nothing) -> mempty
-      (_, Just is) -> foldMap (\(addr, tokens) -> tokens) is
+      (_, Nothing)     -> mempty
+      (_, Just tokens) -> tokens 
 
     extraCoinSource = Just $ addCoin
         (withdrawalToCoin $ view #txWithdrawal ctx)
@@ -747,8 +747,10 @@ mkTxSkeleton witness context skeleton = TxSkeleton
     , txMintAssets =
         let
           (mMinting, mBurning) = view #txMintBurnInfo context
+          getAssetIds = fmap fst . TokenMap.toFlatList
         in
-          nub $ foldMap (maybe [] (fmap fst . TokenMap.toFlatList . foldMap snd)) [mMinting, mBurning]
+          -- nub $ foldMap (maybe [] (fmap fst . TokenMap.toFlatList . foldMap snd)) [mMinting, mBurning]
+          (nub $ maybe [] getAssetIds mBurning) <> (nub $ maybe [] (getAssetIds . foldMap snd) mMinting)
     }
 
 
@@ -1205,7 +1207,7 @@ mkUnsignedTx
     -> [(Cardano.StakeAddress, Cardano.Lovelace)]
     -> [Cardano.Certificate]
     -> Cardano.Lovelace
-    -> (Maybe (NE.NonEmpty (Address, TokenMap)), Maybe (NE.NonEmpty (Address, TokenMap)))
+    -> (Maybe (NE.NonEmpty (Address, TokenMap)), Maybe TokenMap)
     -> [Cardano.SimpleScript Cardano.SimpleScriptV2]
     -> Either ErrMkTx (Cardano.TxBody era)
 mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) scripts =
@@ -1346,7 +1348,7 @@ mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) scripts =
         burnValue :: Maybe Cardano.Value
         burnValue =
           mBurnOuts
-          <&> (F.foldMap' (Compatibility.toCardanoValue . TokenBundle.fromTokenMap . snd))
+          <&> (Compatibility.toCardanoValue . TokenBundle.fromTokenMap)
           <&> Cardano.negateValue
 
         toErrMkTx = ErrConstructedInvalidTx . T.pack . Cardano.displayError

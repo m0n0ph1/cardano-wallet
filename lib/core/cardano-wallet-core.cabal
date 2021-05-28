@@ -151,6 +151,7 @@ library
       Cardano.Pool.Metadata
       Cardano.Wallet
       Cardano.Wallet.Api
+      Cardano.Wallet.MintBurn
       Cardano.Wallet.Api.Client
       Cardano.Wallet.Api.Link
       Cardano.Wallet.Api.Server
