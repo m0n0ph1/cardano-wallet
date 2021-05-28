@@ -1170,7 +1170,7 @@ instance Malformed (BodyParam PostSignTransactionData) where
             , ("{\"transaction\": \"\", \"random\"}", msgJsonInvalid)
             , ("{\"transaction\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "Error in $.transaction: parsing ApiSerialisedTransactionParts failed, expected Object, but encountered String")
             , ("{\"transaction\": 1020344, \"passphase\": \"Secure Passphrase\"}", "Error in $.transaction: parsing ApiSerialisedTransactionParts failed, expected Object, but encountered Number")
-            , ("{\"transaction\": { \"body\": 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
+            , ("{\"transaction\": { \"body\": 1020344 }, \"passphase\": \"Secure Passphrase\"}", "Error in $.transaction: parsing 'Base64 ByteString failed, expected String, but encountered Number")
             ]
          jsonValid = first (BodyParam . Aeson.encode) <$>
             [ -- passphrase
