@@ -1349,7 +1349,7 @@ mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) scripts =
         burnValue =
           mBurnOuts
           <&> (Compatibility.toCardanoValue . TokenBundle.fromTokenMap)
-          <&> Cardano.negateValue
+          <&> F.foldMap' ardano.negateValue
 
         toErrMkTx = ErrConstructedInvalidTx . T.pack . Cardano.displayError
 

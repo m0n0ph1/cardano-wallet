@@ -1027,14 +1027,14 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
       addrs <- listAddresses @n ctx w
       let destination = (addrs !! 1) ^. #id
       let payload = Json [json|{
-                              "address": #{destination},
-                              "mint_amount": {
-                                  "quantity": 5,
-                                  "unit": "assets"
+                              "mint_burn": {
+                                  "monetary_policy_index": "0",
+                                  "token_name": "aaaa",
+                                  "operation": {
+                                    "mint": [ [ #{destination}, { "quantity": 5, "unit": "assets" } ] ]
+                                  }
                               },
-                              "monetary_policy_index": "0",
-                              "passphrase": #{fixturePassphrase},
-                              "asset_name": "aaaa"
+                              "passphrase": #{fixturePassphrase}
                    }|]
 
       r1 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default payload
@@ -1055,14 +1055,14 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
       addrs <- listAddresses @n ctx w
       let destination = (addrs !! 1) ^. #id
       let mintPayload = Json [json|{
-                              "address": #{destination},
-                              "mint_amount": {
-                                  "quantity": 5,
-                                  "unit": "assets"
+                              "mint_burn": {
+                                  "monetary_policy_index": "0",
+                                  "token_name": "aaaa",
+                                  "operation": {
+                                    "mint": [ [ #{destination}, { "quantity": 5, "unit": "assets" } ] ]
+                                  }
                               },
-                              "monetary_policy_index": "0",
-                              "passphrase": #{fixturePassphrase},
-                              "asset_name": "aaaa"
+                              "passphrase": #{fixturePassphrase}
                    }|]
 
       r1 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default mintPayload
@@ -1072,14 +1072,14 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
         ]
 
       let burnPayload = Json [json|{
-                              "address": #{destination},
-                              "burn_amount": {
-                                  "quantity": 5,
-                                  "unit": "assets"
+                              "mint_burn": {
+                                  "monetary_policy_index": "0",
+                                  "token_name": "aaaa",
+                                  "operation": {
+                                    "burn": { "quantity": 5, "unit": "assets" }
+                                  }
                               },
-                              "monetary_policy_index": "0",
-                              "passphrase": #{fixturePassphrase},
-                              "asset_name": "aaaa"
+                              "passphrase": #{fixturePassphrase}
                    }|]
 
       r2 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default burnPayload

@@ -2941,7 +2941,7 @@ instance EncodeAddress n => ToJSON (ForgeTokenData n) where
 data ApiMintBurnData (n :: NetworkDiscriminant) = ApiMintBurnData
   { monetaryPolicyIndex :: !(Maybe (ApiT DerivationIndex))
   , tokenName           :: !(ApiT W.TokenName)
-  , mintBurnOperation   :: !(ApiMintBurnOperation n)
+  , operation           :: !(ApiMintBurnOperation n)
   } deriving (Eq, Generic, Show)
 
 instance DecodeAddress n => FromJSON (ApiMintBurnData n) where

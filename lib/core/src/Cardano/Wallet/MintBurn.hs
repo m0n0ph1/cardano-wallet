@@ -91,7 +91,7 @@ fromApiMintBurnData apiReq =
     op :: MintBurnOperation
     op
       = apiReq
-        & Api.mintBurnOperation
+        & Api.operation
         & fromApiMintBurnOperation
   in
     MintBurnData op (RequestData monetaryPolicyIdx assetName)
