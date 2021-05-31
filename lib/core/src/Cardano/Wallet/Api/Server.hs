@@ -3578,7 +3578,7 @@ forgeToken ctx genChange (ApiT wid) body = do
                 , txScripts = [MintBurn.getMintBurnScript mintBurnData]
                 }
 
-        w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
+        w@(utxo, _, txs) <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
         sel <- liftHandler $ case MintBurn.getTxOuts mintBurnData of
                  []     -> W.selectAssetsNoOutputs @_ @s @k wrk wid w txCtx (const Prelude.id)
                  tx:txs -> W.selectAssets @_ @s @k wrk w txCtx (tx NE.:| txs) (const Prelude.id)

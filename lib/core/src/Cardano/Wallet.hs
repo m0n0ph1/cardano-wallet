@@ -1453,9 +1453,15 @@ selectAssets ctx (utxo, cp, pending) tx outs transform = do
         (calcMinimumCost tl pp tx)
         (tokenBundleSizeAssessor tl)
         (selectionCriteria)
-    liftIO $ traceWith tr $ MsgSelectionDone sel
+    -- A burned token must have an input, so we pretend that the burnt
+    -- token is an output, so that the selection algorithm finds us an
+    -- input to cover that output. Now that the selection algorithm
+    -- has found us an input, we need to remove the output from the
+    -- set of outputs.
+    let sel' = sel
+    liftIO $ traceWith tr $ MsgSelectionDone sel'
     withExceptT ErrSelectAssetsSelectionError $ except $
-        transform (getState cp) <$> sel
+        transform (getState cp) <$> sel'
   where
     nl = ctx ^. networkLayer
     tl = ctx ^. transactionLayer @k

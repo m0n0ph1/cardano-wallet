@@ -45,6 +45,8 @@ module Cardano.Wallet.Shelley.Transaction
 
 import Prelude
 
+import qualified Debug.Trace as Debug
+
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
 import Cardano.Address.Script (Script(RequireSignatureOf, RequireAllOf, RequireAnyOf, RequireSomeOf, ActiveUntilSlot, ActiveFromSlot), KeyHash)
@@ -297,6 +299,8 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mintBurnOu
             wdrl
 
     unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mintBurnOuts scripts
+    Debug.trace ("inputs: " <> (show $ F.toList (inputsSelected cs))) (pure ())
+    Debug.trace (show unsigned) (pure ())
 
     wits <- case (txWitnessTagFor @k) of
         TxWitnessShelleyUTxO -> do
@@ -1349,7 +1353,7 @@ mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) scripts =
         burnValue =
           mBurnOuts
           <&> (Compatibility.toCardanoValue . TokenBundle.fromTokenMap)
-          <&> F.foldMap' ardano.negateValue
+          <&> Cardano.negateValue
 
         toErrMkTx = ErrConstructedInvalidTx . T.pack . Cardano.displayError
 

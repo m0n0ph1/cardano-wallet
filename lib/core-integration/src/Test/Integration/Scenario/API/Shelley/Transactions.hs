@@ -1071,6 +1071,27 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
         [ expectResponseCode HTTP.status202
         ]
 
+      r2 <- request @([ApiAsset]) ctx (Link.listAssets w) Default Empty
+      verify r2
+        [ expectSuccess
+        , expectListSizeSatisfy (> 0)
+        ]
+
+      eventually "Minted tokens are available" $ do
+        let link = Link.listTransactions' @'Shelley w Nothing Nothing Nothing (Just Descending)
+        (_, txs) <- unsafeRequest @([ApiTransaction n]) ctx link Empty
+        case filter ((== Pending) . view (#status . #getApiT)) txs of
+               -- No more pending transactions, can we now burn? Continue to test.
+               []  -> pure ()
+               -- Still pending transactions, retry
+               txs -> fail "Mint Tx still pending, need to retry scenario."
+
+      -- rGet2 <- request @ApiWallet ctx
+      --     (Link.getWallet @'Shelley w) Default Empty
+      -- verify rGet2
+      --     [ expectField (#assets . #total) (`shouldBe` mempty)
+      --     ]
+
       let burnPayload = Json [json|{
                               "mint_burn": {
                                   "monetary_policy_index": "0",
@@ -1081,18 +1102,20 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
                               },
                               "passphrase": #{fixturePassphrase}
                    }|]
-
-      r2 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default burnPayload
-
-      verify r2
+      
+      r3 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default burnPayload
+      
+      verify r3
         [ expectResponseCode HTTP.status202
         ]
 
-      r3 <- request @([ApiAsset]) ctx (Link.listAssets w) Default Empty
-      verify r3
-        [ expectSuccess
-        , expectListSizeSatisfy (== 0)
-        ]
+      eventually "Burned tokens are no longer available" $ do
+        rGet <- request @ApiWallet ctx
+            (Link.getWallet @'Shelley w) Default Empty
+        verify rGet
+            [ expectField (#assets . #total) (`shouldBe` mempty)
+            ]
+
       
     it "TRANSMETA_CREATE_01 - Transaction with metadata" $ \ctx -> runResourceT $ do
         (wa, wb) <- (,) <$> fixtureWallet ctx <*> emptyWallet ctx

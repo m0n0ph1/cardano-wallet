@@ -177,7 +177,7 @@ data SelectionCriteria = SelectionCriteria
         -- ^ When a token is minted, it provides an extra source of tokens.
     , burnInputs
         :: !TokenMap
-        -- ^ When a token is burned, it increases the balance required, as we must find tokens to burn.
+        -- ^ When a token is burned, the selection algorithm must find inputs to satisfy the burn.
     }
     deriving (Eq, Show)
 
@@ -437,9 +437,9 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
         state <- runSelection
             selectionLimit extraCoinSource utxoAvailable balanceRequired
         let balanceSelected = fullBalance (selected state) extraCoinSource mintInputs
-        if balanceRequired `leq` balanceSelected then
+        if balanceRequired `leq` balanceSelected
+        then
             makeChangeRepeatedly state
-
         else
             pure $ Left $ SelectionInsufficient $ SelectionInsufficientError
                 { inputsSelected = UTxOIndex.toList (selected state)
@@ -526,6 +526,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
             , inputBundles
             , outputBundles
             , mintInputs
+            , burnInputs
             }
         )
       where
@@ -548,6 +549,9 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
     -- Eventually it returns just a final selection, or 'Nothing' if no more
     -- ada-only inputs are available.
     --
+    -- This function also takes a list of tokens that are to be
+    -- burned, and hence although an input will be consumed for them,
+    -- this function won't make an associated output for them.
     makeChangeRepeatedly
         :: SelectionState
         -> m (Either SelectionError (SelectionResult TokenBundle))
@@ -591,6 +595,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
             , inputBundles =  view #tokens . snd <$> inputsSelected
             , outputBundles = view #tokens <$> outputsToCover
             , mintInputs
+            , burnInputs
             }
 
         mkSelectionResult :: [TokenBundle] -> SelectionResult TokenBundle
@@ -849,6 +854,8 @@ data MakeChangeCriteria minCoinFor bundleSizeAssessor = MakeChangeCriteria
         -- ^ Token bundles of original outputs.
     , mintInputs :: TokenMap
         -- ^ Minted tokens provide an additional source of tokens.
+    , burnInputs :: TokenMap
+        -- ^ Burned tokens consume an input but produce no output.
     } deriving (Eq, Generic, Show)
 
 -- | Indicates 'True' if and only if a token bundle exceeds the maximum size
@@ -905,6 +912,7 @@ makeChange criteria
         , inputBundles
         , outputBundles
         , mintInputs
+        , burnInputs
         } = criteria
 
     -- The following subtraction is safe, as we have already checked
@@ -1028,14 +1036,14 @@ makeChange criteria
     outputCoins = view #coin <$> outputBundles
 
     totalInputValue :: TokenBundle
-    totalInputValue = TokenBundle.add
-      (TokenBundle.add
-        (F.fold inputBundles)
-        (maybe TokenBundle.empty TokenBundle.fromCoin extraCoinSource))
-      (TokenBundle.fromTokenMap mintInputs)
+    totalInputValue =
+      F.fold inputBundles
+      `TokenBundle.add` maybe TokenBundle.empty TokenBundle.fromCoin extraCoinSource
+      `TokenBundle.add` TokenBundle.fromTokenMap mintInputs
 
     totalOutputValue :: TokenBundle
     totalOutputValue = F.fold outputBundles
+      `TokenBundle.add` TokenBundle.fromTokenMap burnInputs
 
     -- Identifiers of all user-specified assets: assets that were included in
     -- the original set of outputs.
