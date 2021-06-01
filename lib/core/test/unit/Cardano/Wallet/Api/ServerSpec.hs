@@ -3,6 +3,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -93,6 +94,8 @@ import Data.Set
     ( Set )
 import Data.Time.Clock
     ( NominalDiffTime, addUTCTime, getCurrentTime )
+import GHC.Generics
+    ( Generic )
 import Network.Socket
     ( Family (..)
     , SockAddr (..)
@@ -132,6 +135,8 @@ import Test.QuickCheck.Property
     ( counterexample, property )
 import Test.Utils.Windows
     ( skipOnWindows )
+import Text.Pretty.Simple
+    ( pShow )
 import UnliftIO.Async
     ( concurrently_, race_ )
 import UnliftIO.Concurrent
@@ -141,6 +146,7 @@ import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Set as Set
+import qualified Data.Text.Lazy as TL
 import qualified Ouroboros.Consensus.HardFork.History.EraParams as HF
 import qualified Ouroboros.Consensus.HardFork.History.Qry as HF
 import qualified Ouroboros.Consensus.HardFork.History.Summary as HF
@@ -327,11 +333,11 @@ listStakeKeysSpec = do
             property prop_listStakeKeysDisjoint
 
 prop_listStakeKeysDisjoint
-    :: UTxO
+    :: PrettyShow UTxO
     -> Set RewardAccount
     -> (Map RewardAccount (Maybe Coin))
     -> Property
-prop_listStakeKeysDisjoint utxo ours' m =
+prop_listStakeKeysDisjoint (PrettyShow utxo) ours' m =
     let
         -- Build a list to pass listStakeKeys'
         ours = zipWith (\ix acc -> (acc, ix, noDelegation))
@@ -343,8 +349,7 @@ prop_listStakeKeysDisjoint utxo ours' m =
 
         ourKeys = keys _ours
         foreignKeys = keys _foreign
-    in
-        classify (length ourKeys > 1 && length foreignKeys > 1) "non-trivial" $
+    in classify (length ourKeys > 1 && length foreignKeys > 1) "non-trivial" $
             keys _ours `disjoint` keys _foreign
   where
     labeledCheck notF f a b = counterexample
@@ -356,10 +361,10 @@ prop_listStakeKeysDisjoint utxo ours' m =
     keys = Set.fromList . map (view #_key)
 
 prop_listStakeKeysBalance
-    :: UTxO
+    :: PrettyShow UTxO
     -> Set RewardAccount
     -> Property
-prop_listStakeKeysBalance utxo ours' = checkCoverage $
+prop_listStakeKeysBalance (PrettyShow utxo) ours' = checkCoverage $
     let
         -- Build a list to pass listStakeKeys'
         --
@@ -379,8 +384,7 @@ prop_listStakeKeysBalance utxo ours' = checkCoverage $
             && length foreignKeys > 1
             && totalStake [_none] > 0
 
-    in
-       cover 35 isNonTrivial "non-trivial" $
+    in cover 35 isNonTrivial "non-trivial" $
             ((totalStake _ours) +
                 (totalStake _foreign) +
                 (totalStake [_none]))
@@ -430,3 +434,11 @@ instance Arbitrary Coin where
 instance Arbitrary RewardAccount where
     arbitrary = RewardAccount . B8.singleton
         <$> elements (['0' .. '7'] ++ ['a' .. 'z'])
+
+-- Helpers
+
+newtype PrettyShow a = PrettyShow a
+    deriving newtype (Arbitrary, Eq)
+
+instance (Generic a, Show a) => Show (PrettyShow a) where
+    show (PrettyShow a) = TL.unpack . pShow $ a
