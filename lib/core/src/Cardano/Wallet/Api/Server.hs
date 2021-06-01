@@ -2049,9 +2049,15 @@ listStakeKeys'
     => UTxO.UTxO
         -- ^ The wallet's UTxO
     -> (Address -> Maybe RewardAccount)
-        -- ^ Lookup reward account of addr
+        -- ^ Lookup the `RewardAccount` of an `Address`.
     -> (Set RewardAccount -> m (Map RewardAccount (Maybe Coin)))
-        -- ^ Batch fetch of rewards
+        -- ^ Batch fetch of rewards.
+        --
+        -- This allows:
+        -- - The caller to choose how to fetch rewards.
+        -- - This function to choose which accounts / stake keys to fetch
+        -- rewards for. This is tricky to know for the caller, as we also fetch
+        -- rewards for the foreign keys we find in the UTxO.
     -> [(RewardAccount, Natural, ApiWalletDelegation)]
         -- ^ The wallet's known stake keys, along with derivation index, and
         -- delegation status.
@@ -2127,14 +2133,26 @@ listStakeKeys lookupStakeRef ctx (ApiT wid) = do
                 <$> liftIO . runExceptT $ W.readRewardAccount @_ @s @k @n wrk wid
             ourApiDelegation <- liftIO $ toApiWalletDelegation (meta ^. #delegation)
                 (unsafeExtendSafeZone (timeInterpreter $ ctx ^. networkLayer))
+
+            -- With ADP-808 we will be able to have many keys. Currently there's
+            -- only one.
             let ourKeys = case mourAccount of
                     Just acc -> [(acc, 0, ourApiDelegation)]
                     Nothing -> []
 
+            -- This uses `getAccountBalance` under the hood. This should give us
+            -- automatic batching of requests, but at the expense of some
+            -- results potentially being zero until listing stake keys once
+            -- more.
+            --
+            -- We could replace this with with a direct batch-fetch function
+            -- if this turns out to be a problem.
             let fetchRewards = flip lookupUsing rewardsOfAccount . Set.toList
+
             liftIO $ listStakeKeys' @n utxo lookupStakeRef fetchRewards ourKeys
 
   where
+    -- | Construct a map from repeatedly calling a monadic lookup function.
     lookupUsing
         :: (Traversable t, Monad m, Ord a) => t a -> (a -> m b) -> m (Map a b)
     lookupUsing xs f =
