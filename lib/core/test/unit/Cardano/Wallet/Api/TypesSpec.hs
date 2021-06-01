@@ -50,8 +50,9 @@ import Cardano.Wallet.Api
     ( Api )
 import Cardano.Wallet.Api.Types
     ( AccountPostData (..)
+    , ApiMintBurnData (..)
+    , ApiMintBurnOperation (..)
     , AddressAmount (..)
-    , AddressMintAmount (..)
     , AnyAddress (..)
     , ApiAccountKey (..)
     , ApiAccountKeyShared (..)
@@ -956,8 +957,7 @@ spec = parallel $ do
         it "MintTokenData" $ property $ \x ->
           let
             x' = MintTokenData
-                 { forgePayments = forgePayments (x :: MintTokenData ('Testnet 0))
-                 , assetName = assetName (x :: MintTokenData ('Testnet 0))
+                 { mintBurn = mintBurn (x :: MintTokenData ('Testnet 0))
                  , passphrase = passphrase (x :: MintTokenData ('Testnet 0))
                  , metadata = metadata (x :: MintTokenData ('Testnet 0))
                  , timeToLive = timeToLive (x :: MintTokenData ('Testnet 0))
@@ -1823,13 +1823,27 @@ instance Arbitrary (PostTransactionData t) where
 instance Arbitrary (MintTokenData t) where
   arbitrary = MintTokenData
         <$> arbitrary
-        <*> (ApiT <$> genTokenNameSmallRange)
         <*> arbitrary
         <*> arbitrary
         <*> arbitrary
 
-instance Arbitrary addr => Arbitrary (AddressMintAmount addr) where
-  arbitrary = applyArbitray2 AddressMintAmount
+instance Arbitrary (ApiMintBurnData t) where
+  arbitrary = ApiMintBurnData
+    <$> arbitrary
+    <*> (ApiT <$> genTokenNameSmallRange)
+    <*> arbitrary
+
+instance Arbitrary (ApiMintBurnOperation t) where
+  arbitrary
+    = oneof [ ApiMint <$> arbitrary
+            , ApiBurn <$> arbitrary
+            , ApiBoth <$> arbitrary <*> arbitrary
+            ]
+
+instance Arbitrary (Quantity "assets" Natural) where
+    shrink (Quantity 0) = []
+    shrink _ = [Quantity 0]
+    arbitrary = Quantity . fromIntegral <$> (arbitrary @Word8)
 
 instance Arbitrary ApiWithdrawalPostData where
     arbitrary = genericArbitrary

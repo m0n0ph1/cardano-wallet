@@ -543,17 +543,22 @@ genSelectionCriteria genUTxOIndex = do
           )
         ]
     extraCoinSource <- oneof [ pure Nothing, Just <$> genCoinSmall ]
+    mintInputs <- arbitrary
+    burnInputs <- arbitrary
     pure $ SelectionCriteria
-        { outputsToCover, utxoAvailable, extraCoinSource, selectionLimit }
+        { outputsToCover, utxoAvailable, extraCoinSource, selectionLimit, mintInputs, burnInputs }
 
 balanceSufficient :: SelectionCriteria -> Bool
 balanceSufficient criteria =
     balanceRequired `leq` balanceAvailable
   where
-    SelectionCriteria {outputsToCover, utxoAvailable, extraCoinSource}
+    SelectionCriteria {outputsToCover, utxoAvailable, extraCoinSource, mintInputs, burnInputs}
         = criteria
-    balanceRequired = F.foldMap (view #tokens) outputsToCover
-    balanceAvailable = fullBalance utxoAvailable extraCoinSource
+    balanceRequired =
+      F.foldMap (view #tokens) outputsToCover
+        `TokenBundle.add`
+          (TokenBundle.fromTokenMap burnInputs)
+    balanceAvailable = fullBalance utxoAvailable extraCoinSource mintInputs
 
 prop_performSelection_small
     :: MinCoinValueFor
@@ -651,6 +656,8 @@ prop_performSelection minCoinValueFor costFor (Blind criteria) coverage =
         , utxoAvailable
         , extraCoinSource
         , selectionLimit
+        , mintInputs
+        , burnInputs
         } = criteria
 
     onSuccess result = do
@@ -717,7 +724,7 @@ prop_performSelection minCoinValueFor costFor (Blind criteria) coverage =
                 fmap (TokenMap.getAssets . view #tokens) changeGenerated
             }
         balanceSelected =
-            fullBalance (UTxOIndex.fromSequence inputsSelected) extraCoinSource
+            fullBalance (UTxOIndex.fromSequence inputsSelected) extraCoinSource mintInputs
         balanceChange =
             F.fold changeGenerated
         expectedCost =
@@ -800,8 +807,11 @@ prop_performSelection minCoinValueFor costFor (Blind criteria) coverage =
             Right{} -> do
                 assert True
 
-    balanceRequired  = F.foldMap (view #tokens) outputsToCover
-    balanceAvailable = fullBalance utxoAvailable extraCoinSource
+    balanceRequired  =
+      F.foldMap (view #tokens) outputsToCover
+        `TokenBundle.add`
+          (TokenBundle.fromTokenMap burnInputs)
+    balanceAvailable = fullBalance utxoAvailable extraCoinSource mintInputs
 
 --------------------------------------------------------------------------------
 -- Running a selection (without making change)
@@ -1153,6 +1163,10 @@ encodeBoundaryTestCriteria c = SelectionCriteria
         NoLimit
     , extraCoinSource =
         Nothing
+    , mintInputs =
+        mempty
+    , burnInputs =
+        mempty
     }
   where
     dummyAddresses :: [Address]
@@ -1523,6 +1537,8 @@ genMakeChangeData = flip suchThat isValidMakeChangeData $ do
         <*> oneof [pure Nothing, Just <$> genCoinSmallPositive]
         <*> genTokenBundles inputBundleCount
         <*> genTokenBundles outputBundleCount
+        <*> arbitrary
+        <*> arbitrary
   where
     genTokenBundles :: Int -> Gen (NonEmpty TokenBundle)
     genTokenBundles count = (:|)
@@ -1550,6 +1566,8 @@ prop_makeChange_identity bundles = (===)
         , bundleSizeAssessor = mkBundleSizeAssessor NoBundleSizeLimit
         , inputBundles = bundles
         , outputBundles = bundles
+        , mintInputs = mempty
+        , burnInputs = mempty
         }
 
 prop_makeChange_length
@@ -1732,6 +1750,8 @@ unit_makeChange =
               , bundleSizeAssessor
               , inputBundles = i
               , outputBundles = o
+              , mintInputs = mempty
+              , burnInputs = mempty
               }
     ]
   where
