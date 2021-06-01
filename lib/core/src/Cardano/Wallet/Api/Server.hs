@@ -271,7 +271,7 @@ import Cardano.Wallet.Compat
 import Cardano.Wallet.DB
     ( DBFactory (..) )
 import Cardano.Wallet.Network
-    ( NetworkLayer, getAccountBalance, timeInterpreter )
+    ( NetworkLayer, timeInterpreter )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DelegationAddress (..)
     , Depth (..)
@@ -2043,68 +2043,66 @@ quitStakePool ctx (ApiT wid) body = do
 
     genChange = delegationAddress @n
 
--- More testable helper for `listStakeKeys`.
+-- | More testable helper for `listStakeKeys`.
 listStakeKeys'
-    :: forall (n :: NetworkDiscriminant) m. Monad m
-    => UTxO.UTxO
-        -- ^ The wallet's UTxO
-    -> (Address -> Maybe RewardAccount)
+    :: forall (n :: NetworkDiscriminant)
+     . (Address -> Maybe RewardAccount)
         -- ^ Lookup reward account of addr
-    -> (Set RewardAccount -> m (Map RewardAccount (Maybe Coin)))
-        -- ^ Batch fetch of rewards
-    -> [(RewardAccount, Natural, ApiWalletDelegation)]
-        -- ^ The wallet's known stake keys, along with derivation index, and
-        -- delegation status.
+    -> UTxO.UTxO
+        -- ^ The wallet's UTxO
+    -> [(RewardAccount, Natural)]
+        -- ^ The wallet's known stake keys, along with derivation index
         --
         -- The `RewardAccount`s (and the derivation indices) must be unique.
-    -> m (ApiStakeKeys n)
-listStakeKeys' utxo lookupStakeRef fetchRewards ourKeysWithInfo = do
-        let distr = stakeKeyCoinDistr lookupStakeRef utxo
-        let stakeKeysInUTxO = catMaybes $ Map.keys distr
-        let stake acc = fromMaybe (Coin 0) $ Map.lookup acc distr
+    -> [(RewardAccount, ApiWalletDelegation)]
+        -- ^ Delegation status
+    -> [(RewardAccount, Coin)]
+        -- ^ Reward account balances
+    -> ApiStakeKeys n
+listStakeKeys' lookupStakeRef utxo ourKeys dlgs accountBalances = ApiStakeKeys
+    { _ours = map mkOurs (zip ourKeys dlgs)
+    , _foreign = map mkForeign foreignKeys
+    , _none = nullKey
+    }
+  where
+    distr = stakeKeyCoinDistr lookupStakeRef utxo
+    stakeKeysInUTxO = catMaybes $ Map.keys distr
+    stake acc = fromMaybe (Coin 0) $ Map.lookup acc distr
 
-        let ourKeys = map (\(acc,_,_) -> acc) ourKeysWithInfo
+    ourAccounts = map fst ourKeys
 
-        let allKeys = ourKeys <> stakeKeysInUTxO
+    -- If we wanted to know whether a stake key is registered or not, we
+    -- could look at the difference between @Nothing@ and
+    -- @Just (Coin 0)@ from the response here, instead of hiding the
+    -- difference.
+    rewardsMap = Map.fromList accountBalances
 
-        -- If we wanted to know whether a stake key is registered or not, we
-        -- could look at the difference between @Nothing@ and
-        -- @Just (Coin 0)@ from the response here, instead of hiding the
-        -- difference.
-        rewardsMap <- fetchRewards $ Set.fromList allKeys
+    rewards acc = fromMaybe (Coin 0) $ Map.lookup acc rewardsMap
 
-        let rewards acc = fromMaybe (Coin 0) $
-                join $ Map.lookup acc rewardsMap
+    mkOurs ((acc, ix), (_acc, deleg)) = ApiOurStakeKey
+        { _index = ix
+        , _key = (ApiT acc, Proxy)
+        , _rewardBalance = coinToQuantity $
+            rewards acc
+        , _delegation = deleg
+        , _stake = coinToQuantity $
+            stake (Just acc) <> rewards acc
+        }
 
-        let mkOurs (acc, ix, deleg) = ApiOurStakeKey
-                { _index = ix
-                , _key = (ApiT acc, Proxy)
-                , _rewardBalance = coinToQuantity $
-                    rewards acc
-                , _delegation = deleg
-                , _stake = coinToQuantity $
-                    stake (Just acc) <> rewards acc
-                }
+    mkForeign acc = ApiForeignStakeKey
+        { _key = (ApiT acc, Proxy)
+        , _rewardBalance = coinToQuantity $
+            rewards acc
+        , _stake = coinToQuantity $
+            stake (Just acc) <> rewards acc
+        }
 
-        let mkForeign acc = ApiForeignStakeKey
-                { _key = (ApiT acc, Proxy)
-                , _rewardBalance = coinToQuantity $
-                    rewards acc
-                , _stake = coinToQuantity $
-                    stake (Just acc) <> rewards acc
-                }
+    foreignKeys = stakeKeysInUTxO \\ ourAccounts
 
-        let foreignKeys = stakeKeysInUTxO \\ ourKeys
+    nullKey = ApiNullStakeKey
+        { _stake = coinToQuantity $ stake Nothing
+        }
 
-        let nullKey = ApiNullStakeKey
-                { _stake = coinToQuantity $ stake Nothing
-                }
-
-        return $ ApiStakeKeys
-            { _ours = map mkOurs ourKeysWithInfo
-            , _foreign = map mkForeign foreignKeys
-            , _none = nullKey
-            }
 
 listStakeKeys
     :: forall ctx s n k.
@@ -2118,31 +2116,21 @@ listStakeKeys
     -> ctx
     -> ApiT WalletId
     -> Handler (ApiStakeKeys n)
-listStakeKeys lookupStakeRef ctx (ApiT wid) = do
-    withWorkerCtx ctx wid liftE liftE $ \wrk -> liftHandler $ do
-            (wal, meta, pending) <- W.readWallet @_ @s @k wrk wid
-            let utxo = availableUTxO @s pending wal
-
-            mourAccount <- fmap (fmap fst . eitherToMaybe)
-                <$> liftIO . runExceptT $ W.readRewardAccount @_ @s @k @n wrk wid
-            ourApiDelegation <- liftIO $ toApiWalletDelegation (meta ^. #delegation)
-                (unsafeExtendSafeZone (timeInterpreter $ ctx ^. networkLayer))
-            let ourKeys = case mourAccount of
-                    Just acc -> [(acc, 0, ourApiDelegation)]
-                    Nothing -> []
-
-            let fetchRewards = flip lookupUsing rewardsOfAccount . Set.toList
-            liftIO $ listStakeKeys' @n utxo lookupStakeRef fetchRewards ourKeys
+listStakeKeys lookupStakeRef ctx (ApiT wid) =
+    withWorkerCtx ctx wid liftE liftE $ \wrk -> do
+        (wal, meta, pending) <- liftHandler $ W.readWallet @_ @s @k wrk wid
+        (rewardAccount, _ix) <- liftHandler $ W.readRewardAccount @_ @s @k @n wrk wid
+        dlg <- liftIO $ toApiWalletDelegation (meta ^. #delegation) ti
+        let ourKeys = [rewardAccount]
+        accountBalances <- mapM (liftHandler . W.queryRewardBalance wrk) ourKeys
+        let utxo = availableUTxO @s pending wal
+        pure $ listStakeKeys' @n lookupStakeRef utxo
+            (zip ourKeys (repeat 0))
+            (zip ourKeys (repeat dlg))
+            (zip ourKeys accountBalances)
 
   where
-    lookupUsing
-        :: (Traversable t, Monad m, Ord a) => t a -> (a -> m b) -> m (Map a b)
-    lookupUsing xs f =
-        Map.fromList . F.toList <$> forM xs (\x -> f x >>= \x' -> pure (x,x') )
-
-    rewardsOfAccount :: forall m. MonadIO m => RewardAccount -> m (Maybe Coin)
-    rewardsOfAccount acc = fmap eitherToMaybe <$> liftIO . runExceptT $
-        getAccountBalance (ctx ^. networkLayer) acc
+    ti = unsafeExtendSafeZone $ timeInterpreter $ ctx ^. networkLayer
 
 {-------------------------------------------------------------------------------
                                 Migrations
