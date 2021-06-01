@@ -66,10 +66,8 @@ import Cardano.Wallet.Primitive.Types.RewardAccount
     ( RewardAccount (..) )
 import Cardano.Wallet.Primitive.Types.UTxO
     ( UTxO, balance )
-import Cardano.Wallet.Primitive.Types.UTxOIndex
-    ( fromUTxO, toUTxO )
-import Cardano.Wallet.Primitive.Types.UTxOIndex.Gen
-    ( genUTxOIndexSmall, shrinkUTxOIndexSmall )
+import Cardano.Wallet.Primitive.Types.UTxO.Gen
+    ( genUTxOSmall, shrinkUTxOSmall )
 import Cardano.Wallet.Unsafe
     ( unsafeFromText )
 import Control.Monad
@@ -413,8 +411,8 @@ accountOfAddress (Address bytes) =
         else Just $ RewardAccount $ B8.pack [char]
 
 instance Arbitrary UTxO where
-    arbitrary = toUTxO <$> genUTxOIndexSmall
-    shrink = map toUTxO . shrinkUTxOIndexSmall . fromUTxO
+    arbitrary = genUTxOSmall
+    shrink = shrinkUTxOSmall
 
 instance Arbitrary Natural where
     arbitrary = fromIntegral . getNonNegative @Int <$> arbitrary
