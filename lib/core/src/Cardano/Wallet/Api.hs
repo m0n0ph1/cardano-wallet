@@ -190,9 +190,9 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
-    , MintTokenDataT
     , Iso8601Time
     , MinWithdrawal
+    , MintTokenDataT
     , PostExternalTransactionData
     , PostTransactionDataT
     , PostTransactionFeeDataT

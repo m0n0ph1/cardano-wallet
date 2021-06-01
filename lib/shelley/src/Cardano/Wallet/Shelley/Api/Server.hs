@@ -68,7 +68,6 @@ import Cardano.Wallet.Api.Server
     , deleteWallet
     , derivePublicKeyShared
     , derivePublicKeyShelley
-    , mintToken
     , getAsset
     , getAssetDefault
     , getCurrentEpoch
@@ -86,6 +85,7 @@ import Cardano.Wallet.Api.Server
     , listTransactions
     , listWallets
     , migrateWallet
+    , mintToken
     , mkLegacyWallet
     , mkSharedWallet
     , mkShelleyWallet
