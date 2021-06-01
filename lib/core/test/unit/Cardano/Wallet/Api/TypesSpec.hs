@@ -51,7 +51,7 @@ import Cardano.Wallet.Api
 import Cardano.Wallet.Api.Types
     ( AccountPostData (..)
     , AddressAmount (..)
-    , AddressForgeAmount (..)
+    , AddressMintAmount (..)
     , AnyAddress (..)
     , ApiAccountKey (..)
     , ApiAccountKeyShared (..)
@@ -137,7 +137,7 @@ import Cardano.Wallet.Api.Types
     , DecodeStakeAddress (..)
     , EncodeAddress (..)
     , EncodeStakeAddress (..)
-    , ForgeTokenData (..)
+    , MintTokenData (..)
     , HealthCheckSMASH (..)
     , Iso8601Time (..)
     , KeyFormat (..)
@@ -470,7 +470,7 @@ spec = parallel $ do
             jsonRoundtripAndGolden $ Proxy @ApiMaintenanceAction
             jsonRoundtripAndGolden $ Proxy @ApiMaintenanceActionPostData
             jsonRoundtripAndGolden $ Proxy @ApiAsset
-            jsonRoundtripAndGolden $ Proxy @(ForgeTokenData ('Testnet 0))
+            jsonRoundtripAndGolden $ Proxy @(MintTokenData ('Testnet 0))
 
     describe "Textual encoding" $ do
         describe "Can perform roundtrip textual encoding & decoding" $ do
@@ -953,14 +953,14 @@ spec = parallel $ do
                     }
             in
                 x' === x .&&. show x' === show x
-        it "ForgeTokenData" $ property $ \x ->
+        it "MintTokenData" $ property $ \x ->
           let
-            x' = ForgeTokenData
-                 { forgePayments = forgePayments (x :: ForgeTokenData ('Testnet 0))
-                 , assetName = assetName (x :: ForgeTokenData ('Testnet 0))
-                 , passphrase = passphrase (x :: ForgeTokenData ('Testnet 0))
-                 , metadata = metadata (x :: ForgeTokenData ('Testnet 0))
-                 , timeToLive = timeToLive (x :: ForgeTokenData ('Testnet 0))
+            x' = MintTokenData
+                 { forgePayments = forgePayments (x :: MintTokenData ('Testnet 0))
+                 , assetName = assetName (x :: MintTokenData ('Testnet 0))
+                 , passphrase = passphrase (x :: MintTokenData ('Testnet 0))
+                 , metadata = metadata (x :: MintTokenData ('Testnet 0))
+                 , timeToLive = timeToLive (x :: MintTokenData ('Testnet 0))
                  }
           in
                x' === x .&&. show x' === show x
@@ -1820,16 +1820,16 @@ instance Arbitrary (PostTransactionData t) where
         <*> arbitrary
         <*> arbitrary
 
-instance Arbitrary (ForgeTokenData t) where
-  arbitrary = ForgeTokenData
+instance Arbitrary (MintTokenData t) where
+  arbitrary = MintTokenData
         <$> arbitrary
         <*> (ApiT <$> genTokenNameSmallRange)
         <*> arbitrary
         <*> arbitrary
         <*> arbitrary
 
-instance Arbitrary addr => Arbitrary (AddressForgeAmount addr) where
-  arbitrary = AddressForgeAmount <$> arbitrary <*> arbitrary
+instance Arbitrary addr => Arbitrary (AddressMintAmount addr) where
+  arbitrary = applyArbitray2 AddressMintAmount
 
 instance Arbitrary ApiWithdrawalPostData where
     arbitrary = genericArbitrary
@@ -2204,9 +2204,9 @@ instance ToSchema (PostTransactionData t) where
         addDefinition =<< declareSchemaForDefinition "TransactionMetadataValue"
         declareSchemaForDefinition "ApiPostTransactionData"
 
-instance ToSchema (ForgeTokenData t) where
+instance ToSchema (MintTokenData t) where
     declareNamedSchema _ = do
-        declareSchemaForDefinition "ApiForgeTokenData"
+        declareSchemaForDefinition "ApiMintTokenData"
 
 instance ToSchema (PostTransactionFeeData t) where
     declareNamedSchema _ = do

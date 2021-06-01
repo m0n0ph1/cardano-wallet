@@ -89,8 +89,6 @@ data EnrichedData key
                  , enrichedPassphrase :: Passphrase "encryption"
                  }
 
--- data StrippedData = ...
-
 fromApiMintBurnData :: ApiMintBurnData (n :: NetworkDiscriminant) -> MintBurnData RequestData
 fromApiMintBurnData apiReq =
   let

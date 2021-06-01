@@ -45,8 +45,6 @@ module Cardano.Wallet.Shelley.Transaction
 
 import Prelude
 
-import qualified Debug.Trace as Debug
-
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
 import Cardano.Address.Script
@@ -294,8 +292,6 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mintBurnOu
             wdrl
 
     unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mintBurnOuts
-    Debug.trace ("inputs: " <> (show $ F.toList (inputsSelected cs))) (pure ())
-    Debug.trace (show unsigned) (pure ())
 
     wits <- case (txWitnessTagFor @k) of
         TxWitnessShelleyUTxO -> do

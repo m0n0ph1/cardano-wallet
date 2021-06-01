@@ -134,7 +134,7 @@ module Cardano.Wallet.Api
         , PostExternalTransaction
 
     , Tokens
-      , ForgeToken
+      , MintToken
 
       -- * Api Layer
     , ApiLayer (..)
@@ -190,7 +190,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
-    , ForgeTokenDataT
+    , MintTokenDataT
     , Iso8601Time
     , MinWithdrawal
     , PostExternalTransactionData
@@ -954,15 +954,15 @@ type ListSharedAddresses n = "shared-wallets"
 {-------------------------------------------------------------------------------
                                   Tokens
 
-  See also: https://input-output-hk.github.io/cardano-wallet/api/edge/#tag/Forge
+  See also: https://input-output-hk.github.io/cardano-wallet/api/edge/#tag/Mint
 -------------------------------------------------------------------------------}
 
-type Tokens n = ForgeToken n
+type Tokens n = MintToken n
 
-type ForgeToken n = "wallets"
+type MintToken n = "wallets"
     :> Capture "walletId" (ApiT WalletId)
-    :> "forge"
-    :> ReqBody '[JSON] (ForgeTokenDataT n)
+    :> "mint"
+    :> ReqBody '[JSON] (MintTokenDataT n)
     :> PostAccepted '[JSON] (ApiTransactionT n)
 
 {-------------------------------------------------------------------------------

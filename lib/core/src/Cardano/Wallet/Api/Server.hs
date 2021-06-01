@@ -85,7 +85,7 @@ module Cardano.Wallet.Api.Server
     , postSharedWallet
     , patchSharedWallet
     , mkSharedWallet
-    , forgeToken
+    , mintToken
 
     -- * Server error responses
     , IsServerError(..)
@@ -2648,15 +2648,6 @@ addressAmountToTxOut
 addressAmountToTxOut (AddressAmount (ApiT addr, _) c (ApiT assets)) =
     TxOut addr (TokenBundle.TokenBundle (coinFromQuantity c) assets)
 
--- addressForgeAmountToTxOut
---     :: forall (n :: NetworkDiscriminant). AddressForgeAmount (ApiT Address, Proxy n)
---     -> TxOut
--- addressForgeAmountToTxOut (AddressForgeAmount (ApiT addr, _) forgeAmt) =
---   let
---     assets = Api.mintAmount forgeAmt
---   in
---     TxOut addr (TokenBundle.TokenBundle mempty assets)
-
 natural :: Quantity q Word32 -> Quantity q Natural
 natural = Quantity . fromIntegral . getQuantity
 
@@ -3529,7 +3520,7 @@ instance HasSeverityAnnotation WalletEngineLog where
         MsgWalletWorker msg -> getSeverityAnnotation msg
         MsgSubmitSealedTx msg -> getSeverityAnnotation msg
 
-forgeToken
+mintToken
     :: forall ctx s k n.
         ( ctx ~ ApiLayer s k
         , s ~ SeqState n k
@@ -3546,16 +3537,12 @@ forgeToken
     => ctx
     -> ArgGenChange s
     -> ApiT WalletId
-    -> Api.ForgeTokenData n
+    -> Api.MintTokenData n
     -> Handler (ApiTransaction n)
-forgeToken ctx genChange (ApiT wid) body = do
+mintToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
-    -- let assetName = body ^. #assetName . #getApiT
-    -- let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
-    -- let derivationIndex = maybe (DerivationIndex 0) getApiT $ body ^. #monetaryPolicyIndex
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
-    -- let (ApiT addr, _) = body ^. #address
 
     let mintBurnReq = MintBurn.fromApiMintBurnData $ body ^. #mintBurn
 

@@ -68,7 +68,7 @@ import Cardano.Wallet.Api.Server
     , deleteWallet
     , derivePublicKeyShared
     , derivePublicKeyShelley
-    , forgeToken
+    , mintToken
     , getAsset
     , getAssetDefault
     , getCurrentEpoch
@@ -526,7 +526,7 @@ server byron icarus shelley multisig spl ntp =
              (listAddresses apilayer (normalizeSharedAddress @_ @SharedKey @n))
 
     tokens :: Server (Tokens n)
-    tokens = forgeToken shelley (delegationAddress @n)
+    tokens = mintToken shelley (delegationAddress @n)
 
 postAnyAddress
     :: NetworkId

@@ -68,7 +68,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
-    , ForgeTokenData
+    , MintTokenData
     , PostExternalTransactionData
     , PostTransactionData
     , PostTransactionFeeData
@@ -1762,7 +1762,7 @@ putAddressesDataCases =
       )
     ]
 
-instance Malformed (BodyParam (ForgeTokenData ('Testnet pm))) where
+instance Malformed (BodyParam (MintTokenData ('Testnet pm))) where
     malformed = jsonValid ++ jsonInvalid
      where
          jsonInvalid = first BodyParam <$>

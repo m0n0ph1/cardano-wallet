@@ -33,7 +33,7 @@ import Cardano.Wallet.Api.Types
     , DecodeAddress
     , DecodeStakeAddress
     , EncodeAddress (..)
-    , ForgeTokenData (..)
+    , MintTokenData (..)
     , WalletStyle (..)
     , insertedAt
     , pendingSince
@@ -1035,7 +1035,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
                               "passphrase": #{fixturePassphrase}
                    }|]
 
-      r1 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default payload
+      r1 <- request @(MintTokenData n) ctx (Link.mintToken w) Default payload
 
       verify r1
         [ expectResponseCode HTTP.status202
@@ -1063,7 +1063,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
                               "passphrase": #{fixturePassphrase}
                    }|]
 
-      r1 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default mintPayload
+      r1 <- request @(MintTokenData n) ctx (Link.mintToken w) Default mintPayload
 
       verify r1
         [ expectResponseCode HTTP.status202
@@ -1101,7 +1101,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
                               "passphrase": #{fixturePassphrase}
                    }|]
       
-      r3 <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default burnPayload
+      r3 <- request @(MintTokenData n) ctx (Link.mintToken w) Default burnPayload
       
       verify r3
         [ expectResponseCode HTTP.status202

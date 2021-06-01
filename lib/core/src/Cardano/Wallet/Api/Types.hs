@@ -136,7 +136,7 @@ module Cardano.Wallet.Api.Types
     , ApiAccountKeyShared (..)
     , KeyFormat (..)
     , ApiPostAccountKeyData (..)
-    , ForgeTokenData(..)
+    , MintTokenData(..)
 
     -- * API Types (Byron)
     , ApiByronWallet (..)
@@ -185,7 +185,7 @@ module Cardano.Wallet.Api.Types
     , PostTransactionFeeDataT
     , ApiWalletMigrationPlanPostDataT
     , ApiWalletMigrationPostDataT
-    , ForgeTokenDataT
+    , MintTokenDataT
 
     -- * API Type Conversions
     , coinToQuantity
@@ -2839,7 +2839,7 @@ type family ApiCoinSelectionT (n :: k) :: Type
 type family ApiSelectCoinsDataT (n :: k) :: Type
 type family ApiTransactionT (n :: k) :: Type
 type family PostTransactionDataT (n :: k) :: Type
-type family ForgeTokenDataT (n :: k) :: Type
+type family MintTokenDataT (n :: k) :: Type
 type family PostTransactionFeeDataT (n :: k) :: Type
 type family ApiWalletMigrationPlanPostDataT (n :: k) :: Type
 type family ApiWalletMigrationPostDataT (n :: k1) (s :: k2) :: Type
@@ -2866,8 +2866,8 @@ type instance ApiTransactionT (n :: NetworkDiscriminant) =
 type instance PostTransactionDataT (n :: NetworkDiscriminant) =
     PostTransactionData n
 
-type instance ForgeTokenDataT (n :: NetworkDiscriminant) =
-  ForgeTokenData n
+type instance MintTokenDataT (n :: NetworkDiscriminant) =
+  MintTokenData n
 
 type instance PostTransactionFeeDataT (n :: NetworkDiscriminant) =
     PostTransactionFeeData n
@@ -2925,17 +2925,17 @@ instance ToJSON (ApiT SmashServer) where
                          Token forging types
 -------------------------------------------------------------------------------}
 
-data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
+data MintTokenData (n :: NetworkDiscriminant) = MintTokenData
     { mintBurn :: !(ApiMintBurnData n)
     , passphrase :: !(ApiT (Passphrase "lenient"))
     , metadata :: !(Maybe (ApiT TxMetadata))
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
     } deriving (Eq, Generic, Show)
 
-instance DecodeAddress n => FromJSON (ForgeTokenData n) where
+instance DecodeAddress n => FromJSON (MintTokenData n) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
 
-instance EncodeAddress n => ToJSON (ForgeTokenData n) where
+instance EncodeAddress n => ToJSON (MintTokenData n) where
     toJSON = genericToJSON defaultRecordTypeOptions
 
 data ApiMintBurnData (n :: NetworkDiscriminant) = ApiMintBurnData
