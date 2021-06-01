@@ -114,11 +114,7 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
 import Cardano.Address.Script
-    ( Cosigner (..)
-    , KeyHash
-    , Script (RequireSignatureOf)
-    , ScriptTemplate (..)
-    )
+    ( Cosigner (..), ScriptTemplate (..) )
 import Cardano.Api
     ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..) )
 import Cardano.BM.Tracing
@@ -151,6 +147,7 @@ import Cardano.Wallet
     , ErrReadAccountPublicKey (..)
     , ErrReadRewardAccount (..)
     , ErrRemoveTx (..)
+    , ErrScriptConversion (..)
     , ErrSelectAssets (..)
     , ErrSignMetadataWith (..)
     , ErrSignPayment (..)
@@ -387,13 +384,7 @@ import Cardano.Wallet.Primitive.Types.TokenBundle
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..)
-    , TokenPolicyId (..)
-    , nullTokenName
-    , tokenPolicyIdFromScript
-    )
-import Cardano.Wallet.Primitive.Types.TokenQuantity
-    ( TokenQuantity (TokenQuantity) )
+    ( TokenName (..), TokenPolicyId (..), nullTokenName )
 import Cardano.Wallet.Primitive.Types.Tx
     ( TransactionInfo (TransactionInfo)
     , Tx (..)
@@ -552,7 +543,6 @@ import qualified Cardano.Wallet.Primitive.AddressDerivation.Icarus as Icarus
 import qualified Cardano.Wallet.Primitive.Types as W
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
-import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import qualified Cardano.Wallet.Primitive.Types.Tx as W
 import qualified Cardano.Wallet.Primitive.Types.UTxO as UTxO
 import qualified Cardano.Wallet.Registry as Registry
@@ -3037,6 +3027,7 @@ instance IsServerError ErrSignPayment where
             }
         ErrSignPaymentWithRootKey e@ErrWithRootKeyWrongPassphrase{} -> toServerError e
         ErrSignPaymentIncorrectTTL e -> toServerError e
+        ErrSignPaymentScriptConversion e -> toServerError e
 
 instance IsServerError ErrDecodeSignedTx where
     toServerError = \case
@@ -3150,6 +3141,22 @@ instance IsServerError PastHorizonException where
         , " Wait for the node to finish syncing to the hard fork."
         , " Depending on the blockchain, this process can take an"
         , " unknown amount of time."
+        ]
+
+instance IsServerError ErrScriptConversion where
+  toServerError e = apiError err400 BadRequest $ mconcat $
+    case e of
+      ErrScriptConversionHashExpectedSize sz ->
+        [ "While converting a key hash, expected a hash of size"
+        , " '" <> T.pack (show sz) <> "' bytes."
+        , " Please review the submitted scripts and ensure that"
+        , " the included key hashes are valid."
+        ]
+      ErrScriptConversionExpectedPaymentKey ->
+        [ "While converting a key hash, expected a payment key hash"
+        , " but got a delegation key hash."
+        , " Please review the submitted scripts and ensure that"
+        , " the included key hashes are valid."
         ]
 
 instance IsServerError ErrGetTransaction where
@@ -3578,7 +3585,7 @@ forgeToken ctx genChange (ApiT wid) body = do
                 , txScripts = [MintBurn.getMintBurnScript mintBurnData]
                 }
 
-        w@(utxo, _, txs) <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
+        w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
         sel <- liftHandler $ case MintBurn.getTxOuts mintBurnData of
                  []     -> W.selectAssetsNoOutputs @_ @s @k wrk wid w txCtx (const Prelude.id)
                  tx:txs -> W.selectAssets @_ @s @k wrk w txCtx (tx NE.:| txs) (const Prelude.id)

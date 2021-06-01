@@ -116,10 +116,12 @@ module Cardano.Wallet
     , assignChangeAddressesAndUpdateDb
     , selectionToUnsignedTx
     , signTransaction
+    , prettyPrintScriptConversionError
     , ErrSelectAssets(..)
     , ErrSignPayment (..)
     , ErrNotASequentialWallet (..)
     , ErrWithdrawalNotWorth (..)
+    , ErrScriptConversion (..)
 
     -- ** Migration
     , createMigrationPlan
@@ -193,7 +195,7 @@ import Prelude hiding
 import Cardano.Address.Derivation
     ( XPrv, XPub )
 import Cardano.Address.Script
-    ( Cosigner (..), KeyHash )
+    ( Cosigner (..) )
 import Cardano.Api
     ( serialiseToCBOR )
 import Cardano.BM.Data.Severity
@@ -2843,13 +2845,13 @@ fromCardanoAddressScript (Cardano.Address.RequireSomeOf n ss)         = Cardano.
 fromCardanoAddressScript (Cardano.Address.ActiveFromSlot slot)        = Right $ Cardano.Api.RequireTimeAfter Cardano.Api.TimeLocksInSimpleScriptV2 (fromIntegral slot)
 fromCardanoAddressScript (Cardano.Address.ActiveUntilSlot slot)       = Right $ Cardano.Api.RequireTimeBefore Cardano.Api.TimeLocksInSimpleScriptV2 (fromIntegral slot)
 
-toCardanoAddressScript :: Cardano.Api.SimpleScript Cardano.Api.SimpleScriptV2 -> Cardano.Address.Script Cardano.Address.KeyHash
-toCardanoAddressScript (Cardano.Api.RequireSignature keyHash) = Cardano.Address.RequireSignatureOf . toCardanoAddressKeyHash $ keyHash
-toCardanoAddressScript (Cardano.Api.RequireAllOf ss) = Cardano.Address.RequireAllOf $ toCardanoAddressScript <$> ss
-toCardanoAddressScript (Cardano.Api.RequireAnyOf ss) = Cardano.Address.RequireAnyOf $ toCardanoAddressScript <$> ss
-toCardanoAddressScript (Cardano.Api.RequireMOf n ss) = Cardano.Address.RequireSomeOf (fromIntegral n) $ toCardanoAddressScript <$> ss
-toCardanoAddressScript (Cardano.Api.RequireTimeAfter _ slot) = Cardano.Address.ActiveFromSlot . fromIntegral . Cardano.Api.unSlotNo $ slot
-toCardanoAddressScript (Cardano.Api.RequireTimeBefore _ slot) = Cardano.Address.ActiveUntilSlot . fromIntegral . Cardano.Api.unSlotNo $ slot
+-- toCardanoAddressScript :: Cardano.Api.SimpleScript Cardano.Api.SimpleScriptV2 -> Cardano.Address.Script Cardano.Address.KeyHash
+-- toCardanoAddressScript (Cardano.Api.RequireSignature keyHash) = Cardano.Address.RequireSignatureOf . toCardanoAddressKeyHash $ keyHash
+-- toCardanoAddressScript (Cardano.Api.RequireAllOf ss) = Cardano.Address.RequireAllOf $ toCardanoAddressScript <$> ss
+-- toCardanoAddressScript (Cardano.Api.RequireAnyOf ss) = Cardano.Address.RequireAnyOf $ toCardanoAddressScript <$> ss
+-- toCardanoAddressScript (Cardano.Api.RequireMOf n ss) = Cardano.Address.RequireSomeOf (fromIntegral n) $ toCardanoAddressScript <$> ss
+-- toCardanoAddressScript (Cardano.Api.RequireTimeAfter _ slot) = Cardano.Address.ActiveFromSlot . fromIntegral . Cardano.Api.unSlotNo $ slot
+-- toCardanoAddressScript (Cardano.Api.RequireTimeBefore _ slot) = Cardano.Address.ActiveUntilSlot . fromIntegral . Cardano.Api.unSlotNo $ slot
 
 fromCardanoAddressKeyHash :: Cardano.Address.KeyHash -> Either ErrScriptConversion (Cardano.Api.Hash Cardano.Api.PaymentKey)
 fromCardanoAddressKeyHash (Cardano.Address.KeyHash Cardano.Address.Delegation _) = Left ErrScriptConversionExpectedPaymentKey
@@ -2858,5 +2860,5 @@ fromCardanoAddressKeyHash (Cardano.Address.KeyHash Cardano.Address.Payment bs)  
     Nothing -> Left . ErrScriptConversionHashExpectedSize . fromIntegral $ Crypto.sizeHash (Proxy :: Proxy Crypto.Blake2b_224)
     Just h  -> Right . Cardano.Api.PaymentKeyHash . Shelley.KeyHash $ h
       
-toCardanoAddressKeyHash :: Cardano.Api.Hash Cardano.Api.PaymentKey -> Cardano.Address.KeyHash
-toCardanoAddressKeyHash (Cardano.Api.PaymentKeyHash (Shelley.KeyHash h)) = Cardano.Address.KeyHash Cardano.Address.Payment (Crypto.hashToBytes h)
+-- toCardanoAddressKeyHash :: Cardano.Api.Hash Cardano.Api.PaymentKey -> Cardano.Address.KeyHash
+-- toCardanoAddressKeyHash (Cardano.Api.PaymentKeyHash (Shelley.KeyHash h)) = Cardano.Address.KeyHash Cardano.Address.Payment (Crypto.hashToBytes h)

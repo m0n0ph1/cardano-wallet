@@ -42,7 +42,6 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Role (UtxoExternal)
     , WalletKey
     , hashVerificationKey
-    , liftRawKey
     , publicKey
     )
 import Cardano.Wallet.Primitive.Types.Address
@@ -50,7 +49,7 @@ import Cardano.Wallet.Primitive.Types.Address
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (AssetId), TokenMap )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..), TokenPolicyId (..), tokenPolicyIdFromScript )
+    ( TokenName (..), tokenPolicyIdFromScript )
 import Cardano.Wallet.Primitive.Types.TokenQuantity
     ( TokenQuantity (TokenQuantity) )
 import Cardano.Wallet.Primitive.Types.Tx
@@ -129,9 +128,7 @@ fromApiMintBurnData apiReq =
     fromApiMintBurnOperation (Api.ApiBoth mints burn) = Both (Bifunctor.bimap fromApiAddress fromApiQty <$> mints) (fromApiQty burn)
 
 enrich
-  :: ( Functor f
-     , WalletKey key
-     )
+  :: Functor f 
   => (DerivationIndex -> f (key 'ScriptK XPrv, Passphrase "encryption"))
   -> MintBurnData RequestData
   -> f (MintBurnData (EnrichedData key))
@@ -147,8 +144,8 @@ enrich f reqData =
 enrichedScript :: WalletKey key => EnrichedData key -> Script KeyHash
 enrichedScript = RequireSignatureOf . hashVerificationKey UtxoExternal . publicKey . enrichedKey
 
-enrichedPolicy :: WalletKey key => EnrichedData key -> TokenPolicyId
-enrichedPolicy = tokenPolicyIdFromScript . enrichedScript
+-- enrichedPolicy :: WalletKey key => EnrichedData key -> TokenPolicyId
+-- enrichedPolicy = tokenPolicyIdFromScript . enrichedScript
 
 enrichedAssetId :: WalletKey key => EnrichedData key -> AssetId
 enrichedAssetId enrichedData =
@@ -168,7 +165,7 @@ getMints dat =
 getMintBurnScript :: WalletKey key => MintBurnData (EnrichedData key) -> Script KeyHash
 getMintBurnScript = enrichedScript . mbData
 
-getSigningKey :: WalletKey key => MintBurnData (EnrichedData key) -> (key 'ScriptK XPrv, Passphrase "encryption")
+getSigningKey :: MintBurnData (EnrichedData key) -> (key 'ScriptK XPrv, Passphrase "encryption")
 getSigningKey = (\enriched -> (enrichedKey enriched, enrichedPassphrase enriched)) . mbData
 
 getTxOuts :: WalletKey key => MintBurnData (EnrichedData key) -> [TxOut]
@@ -186,7 +183,7 @@ tmpGetAddrMap enriched =
 
     fm xs = case fmap (fmap (TokenMap.singleton assetId)) xs of
       [] -> Nothing
-      x:xs -> Just $ x NE.:| xs
+      t:ts -> Just $ t NE.:| ts
 
     fb = Just . TokenMap.singleton assetId
   in

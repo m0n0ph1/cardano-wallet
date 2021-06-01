@@ -19,12 +19,10 @@ module Test.Integration.Scenario.API.Shelley.Transactions
 
 import Prelude
 
-import qualified Cardano.Api as Cardano
 import Cardano.Mnemonic
     ( entropyToMnemonic, genEntropy, mnemonicToText )
 import Cardano.Wallet.Api.Types
     ( AddressAmount (..)
-    , ApiAddress
     , ApiAsset (..)
     , ApiFee (..)
     , ApiT (..)
@@ -1084,7 +1082,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
                -- No more pending transactions, can we now burn? Continue to test.
                []  -> pure ()
                -- Still pending transactions, retry
-               txs -> fail "Mint Tx still pending, need to retry scenario."
+               _tx -> fail "Mint Tx still pending, need to retry scenario."
 
       -- rGet2 <- request @ApiWallet ctx
       --     (Link.getWallet @'Shelley w) Default Empty
@@ -2394,7 +2392,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
         -> Natural
         -> Text
         -> m Payload
-    mkTxPayload ctx wDest amt passphrase = do
+    mkTxPayload ctx wDest amt pass = do
         addrs <- listAddresses @n ctx wDest
         let destination = (addrs !! 1) ^. #id
         return $ Json [json|{
@@ -2405,7 +2403,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
                         "unit": "lovelace"
                     }
                 }],
-                "passphrase": #{passphrase}
+                "passphrase": #{pass}
             }|]
 
     addTxTTL :: Double -> Payload -> Payload

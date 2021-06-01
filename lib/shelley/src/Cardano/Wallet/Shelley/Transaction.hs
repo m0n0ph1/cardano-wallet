@@ -61,7 +61,6 @@ import Cardano.Api
     , NetworkId
     , SerialiseAsCBOR (..)
     , ShelleyBasedEra (..)
-    , SimpleScript (RequireSignature)
     )
 import Cardano.Binary
     ( ToCBOR, serialize' )
@@ -98,9 +97,9 @@ import Cardano.Wallet.Primitive.Types.TokenBundle
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..), TokenMap )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..), TokenPolicyId (..) )
+    ( TokenName (..) )
 import Cardano.Wallet.Primitive.Types.TokenQuantity
-    ( TokenQuantity (TokenQuantity), unTokenQuantity )
+    ( TokenQuantity (TokenQuantity) )
 import Cardano.Wallet.Primitive.Types.Tx
     ( SealedTx (..)
     , TokenBundleSizeAssessment (..)
@@ -152,8 +151,6 @@ import Control.Monad
     ( forM )
 import Data.ByteString
     ( ByteString )
-import Data.Foldable
-    ( asum )
 import Data.Function
     ( (&) )
 import Data.Functor
@@ -165,20 +162,15 @@ import Data.Generics.Labels
 import Data.Kind
     ( Type )
 import Data.List
+    ( nub )
 import Data.Maybe
-    ( catMaybes, fromMaybe )
-import Data.Monoid
-    ( Sum (Sum), getSum )
+    ( catMaybes )
 import Data.Quantity
     ( Quantity (..) )
 import Data.Semigroup
-    ( Max (Max), Option (Option), getMax, getOption )
+    ( Option (Option), getOption )
 import Data.Set
     ( Set )
-import Data.String
-    ( fromString )
-import Data.Text.Class
-    ( toText )
 import Data.Type.Equality
     ( type (==) )
 import Data.Word
@@ -190,7 +182,6 @@ import GHC.Stack
 import Ouroboros.Network.Block
     ( SlotNo )
 
-import qualified Cardano.Api as Cardano
 import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Byron as Byron
 import qualified Cardano.Api.Shelley as Cardano
@@ -207,14 +198,11 @@ import qualified Cardano.Wallet.Primitive.Types.UTxOIndex as UTxOIndex
 import qualified Cardano.Wallet.Shelley.Compatibility as Compatibility
 import qualified Codec.CBOR.Encoding as CBOR
 import qualified Codec.CBOR.Write as CBOR
-import qualified Data.Bifunctor as Bifunctor
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
 import qualified Shelley.Spec.Ledger.Address.Bootstrap as SL
 
 -- | Type encapsulating what we need to know to add things -- payloads,
@@ -305,7 +293,7 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mintBurnOu
             (toRewardAccountRaw . toXPub $ rewardAcnt)
             wdrl
 
-    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mintBurnOuts scripts
+    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mintBurnOuts
     Debug.trace ("inputs: " <> (show $ F.toList (inputsSelected cs))) (pure ())
     Debug.trace (show unsigned) (pure ())
 
@@ -552,7 +540,7 @@ _initSelectionCriteria pp ctx utxoAvailable outputsUnprepared
     mintInputs :: TokenMap
     mintInputs = case view #txMintBurnInfo ctx of
       (Nothing, _) -> mempty
-      (Just is, _) -> foldMap (\(addr, tokens) -> tokens) is
+      (Just is, _) -> foldMap snd is
 
     burnInputs :: TokenMap
     burnInputs = case view #txMintBurnInfo ctx of
@@ -1219,9 +1207,8 @@ mkUnsignedTx
     -> [Cardano.Certificate]
     -> Cardano.Lovelace
     -> (Maybe (NE.NonEmpty (Address, TokenMap)), Maybe TokenMap)
-    -> [Cardano.SimpleScript Cardano.SimpleScriptV2]
     -> Either ErrMkTx (Cardano.TxBody era)
-mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) scripts =
+mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) =
     case era of
         ShelleyBasedEraShelley -> mkShelleyTx
         ShelleyBasedEraAllegra -> mkAllegraTx
@@ -1339,9 +1326,6 @@ mkUnsignedTx era ttl cs md wdrls certs fees (mMintOuts, mBurnOuts) scripts =
                 md
 
         , Cardano.txAuxScripts = Cardano.TxAuxScriptsNone
-          -- case scripts of
-          --   [] -> Cardano.TxAuxScriptsNone
-          --   xs -> Cardano.TxAuxScripts Cardano.AuxScriptsInMaryEra ((Cardano.ScriptInEra Cardano.SimpleScriptV2InMary . Cardano.SimpleScript Cardano.SimpleScriptV2) <$> xs)
 
         , Cardano.txUpdateProposal =
             Cardano.TxUpdateProposalNone
@@ -1407,18 +1391,3 @@ mkByronWitness (Cardano.ShelleyTxBody era body _) nw addr encryptedKey =
     addrAttr = Byron.mkAttributes $ Byron.AddrAttributes
         (toHDPayloadAddress addr)
         (Byron.toByronNetworkMagic nw)
-
--- https://stackoverflow.com/a/52602906
--- Every set contains a unique empty subset.
-subsets 0 _ = [[]]
-
--- Empty sets don't have any (non-empty) subsets.
-subsets _ [] = []
-
--- Otherwise we're dealing with non-empty subsets of a non-empty set.
--- If the first element of the set is x, we can get subsets of size n by either:
---   - getting subsets of size n-1 of the remaining set xs and adding x to each of them
---     (those are all subsets containing x), or
---   - getting subsets of size n of the remaining set xs
---     (those are all subsets not containing x)
-subsets n (x : xs) = map (x :) (subsets (n - 1) xs) ++ subsets n xs
