@@ -49,19 +49,19 @@ import qualified Debug.Trace as Debug
 
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
-import Cardano.Address.Script (Script(RequireSignatureOf, RequireAllOf, RequireAnyOf, RequireSomeOf, ActiveUntilSlot, ActiveFromSlot), KeyHash)
-import Data.List 
-import Data.Monoid (Sum(Sum), getSum)
-import Data.Semigroup (Max(Max), getMax, Option(Option), getOption)
+import Cardano.Address.Script
+    ( KeyHash
+    , Script (ActiveFromSlot, ActiveUntilSlot, RequireAllOf, RequireAnyOf, RequireSignatureOf, RequireSomeOf)
+    )
 import Cardano.Api
     ( AnyCardanoEra (..)
-    , SimpleScript(RequireSignature)
     , ByronEra
     , CardanoEra (..)
     , IsShelleyBasedEra
     , NetworkId
     , SerialiseAsCBOR (..)
     , ShelleyBasedEra (..)
+    , SimpleScript (RequireSignature)
     )
 import Cardano.Binary
     ( ToCBOR, serialize' )
@@ -96,18 +96,11 @@ import Cardano.Wallet.Primitive.Types.Coin
 import Cardano.Wallet.Primitive.Types.TokenBundle
     ( TokenBundle )
 import Cardano.Wallet.Primitive.Types.TokenMap
-    ( AssetId (..), TokenMap)
+    ( AssetId (..), TokenMap )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..), TokenPolicyId(..))
+    ( TokenName (..), TokenPolicyId (..) )
 import Cardano.Wallet.Primitive.Types.TokenQuantity
-    ( TokenQuantity(TokenQuantity), unTokenQuantity )
-import Data.String (fromString)
-import Data.Maybe
-    ( fromMaybe, catMaybes )
-import Data.Foldable
-    ( asum )
-import Data.Text.Class
-    ( toText )
+    ( TokenQuantity (TokenQuantity), unTokenQuantity )
 import Cardano.Wallet.Primitive.Types.Tx
     ( SealedTx (..)
     , TokenBundleSizeAssessment (..)
@@ -159,19 +152,33 @@ import Control.Monad
     ( forM )
 import Data.ByteString
     ( ByteString )
-import Data.Functor ((<&>))
+import Data.Foldable
+    ( asum )
 import Data.Function
     ( (&) )
+import Data.Functor
+    ( (<&>) )
 import Data.Generics.Internal.VL.Lens
     ( view )
 import Data.Generics.Labels
     ()
 import Data.Kind
     ( Type )
+import Data.List
+import Data.Maybe
+    ( catMaybes, fromMaybe )
+import Data.Monoid
+    ( Sum (Sum), getSum )
 import Data.Quantity
     ( Quantity (..) )
+import Data.Semigroup
+    ( Max (Max), Option (Option), getMax, getOption )
 import Data.Set
     ( Set )
+import Data.String
+    ( fromString )
+import Data.Text.Class
+    ( toText )
 import Data.Type.Equality
     ( type (==) )
 import Data.Word
@@ -184,11 +191,9 @@ import Ouroboros.Network.Block
     ( SlotNo )
 
 import qualified Cardano.Api as Cardano
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Byron as Byron
 import qualified Cardano.Api.Shelley as Cardano
-import qualified Cardano.Api as Cardano
-import qualified Data.Map.Strict as M
-import qualified Data.Bifunctor as Bifunctor
 import qualified Cardano.Chain.Common as Byron
 import qualified Cardano.Crypto as CC
 import qualified Cardano.Crypto.DSIGN as DSIGN
@@ -202,9 +207,11 @@ import qualified Cardano.Wallet.Primitive.Types.UTxOIndex as UTxOIndex
 import qualified Cardano.Wallet.Shelley.Compatibility as Compatibility
 import qualified Codec.CBOR.Encoding as CBOR
 import qualified Codec.CBOR.Write as CBOR
+import qualified Data.Bifunctor as Bifunctor
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE

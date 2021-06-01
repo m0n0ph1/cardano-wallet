@@ -1,7 +1,7 @@
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Cardano.Wallet.MintBurn
   ( MintBurnData
@@ -18,27 +18,47 @@ module Cardano.Wallet.MintBurn
 
   ) where
 
+import Data.Function
+    ( (&) )
+import Data.Maybe
+    ( fromMaybe )
+import Data.Proxy
+    ( Proxy )
+import Numeric.Natural
+    ( Natural )
 import Prelude
-import Data.Function ((&))
-import Data.Maybe (fromMaybe)
-import Data.Proxy (Proxy)
-import Numeric.Natural (Natural)
 
-import Data.Quantity (Quantity, getQuantity)
-import Cardano.Wallet.Primitive.AddressDerivation ( DerivationIndex (..), Passphrase, hashVerificationKey, Role(UtxoExternal), publicKey, liftRawKey, WalletKey, Depth(..), NetworkDiscriminant)
-import Cardano.Wallet.Primitive.Types.Address ( Address (..) )
-import Cardano.Wallet.Primitive.Types.TokenQuantity (TokenQuantity(TokenQuantity))
-import Cardano.Address.Derivation ( XPrv)
-import Cardano.Address.Script ( KeyHash , Script (RequireSignatureOf))
-import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..)
-    , TokenPolicyId (..)
-    , tokenPolicyIdFromScript
+import Cardano.Address.Derivation
+    ( XPrv )
+import Cardano.Address.Script
+    ( KeyHash, Script (RequireSignatureOf) )
+import Cardano.Wallet.Api.Types
+    ( ApiMintBurnData, ApiMintBurnOperation, getApiT )
+import Cardano.Wallet.Primitive.AddressDerivation
+    ( Depth (..)
+    , DerivationIndex (..)
+    , NetworkDiscriminant
+    , Passphrase
+    , Role (UtxoExternal)
+    , WalletKey
+    , hashVerificationKey
+    , liftRawKey
+    , publicKey
     )
-import Cardano.Wallet.Api.Types (ApiMintBurnData, ApiMintBurnOperation, getApiT)
-import Cardano.Wallet.Primitive.Types.TokenMap (AssetId(AssetId), TokenMap)
-import Cardano.Wallet.Primitive.Types.Tx ( TxOut (..) )
-import Data.List.NonEmpty (NonEmpty)
+import Cardano.Wallet.Primitive.Types.Address
+    ( Address (..) )
+import Cardano.Wallet.Primitive.Types.TokenMap
+    ( AssetId (AssetId), TokenMap )
+import Cardano.Wallet.Primitive.Types.TokenPolicy
+    ( TokenName (..), TokenPolicyId (..), tokenPolicyIdFromScript )
+import Cardano.Wallet.Primitive.Types.TokenQuantity
+    ( TokenQuantity (TokenQuantity) )
+import Cardano.Wallet.Primitive.Types.Tx
+    ( TxOut (..) )
+import Data.List.NonEmpty
+    ( NonEmpty )
+import Data.Quantity
+    ( Quantity, getQuantity )
 
 import qualified Data.Bifunctor as Bifunctor
 

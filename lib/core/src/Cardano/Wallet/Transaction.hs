@@ -36,9 +36,10 @@ module Cardano.Wallet.Transaction
 
 import Prelude
 
-import Cardano.Address.Script (Script, KeyHash)
 import Cardano.Address.Derivation
     ( XPrv )
+import Cardano.Address.Script
+    ( KeyHash, Script )
 import Cardano.Api
     ( AnyCardanoEra, SimpleScript, SimpleScriptV2 )
 import Cardano.Wallet.Primitive.AddressDerivation

@@ -19,13 +19,12 @@ module Test.Integration.Scenario.API.Shelley.Transactions
 
 import Prelude
 
+import qualified Cardano.Api as Cardano
 import Cardano.Mnemonic
     ( entropyToMnemonic, genEntropy, mnemonicToText )
-import qualified Cardano.Api as Cardano
 import Cardano.Wallet.Api.Types
     ( AddressAmount (..)
     , ApiAddress
-    , ForgeTokenData (..)
     , ApiAsset (..)
     , ApiFee (..)
     , ApiT (..)
@@ -36,6 +35,7 @@ import Cardano.Wallet.Api.Types
     , DecodeAddress
     , DecodeStakeAddress
     , EncodeAddress (..)
+    , ForgeTokenData (..)
     , WalletStyle (..)
     , insertedAt
     , pendingSince

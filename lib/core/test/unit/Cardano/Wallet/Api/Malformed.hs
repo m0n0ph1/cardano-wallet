@@ -68,6 +68,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
+    , ForgeTokenData
     , PostExternalTransactionData
     , PostTransactionData
     , PostTransactionFeeData
@@ -76,7 +77,6 @@ import Cardano.Wallet.Api.Types
     , WalletOrAccountPostData
     , WalletPutData
     , WalletPutPassphraseData
-    , ForgeTokenData
     )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DerivationIndex (..), NetworkDiscriminant (..), Role (..) )

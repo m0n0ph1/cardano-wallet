@@ -50,10 +50,9 @@ import Cardano.Wallet.Api
     ( Api )
 import Cardano.Wallet.Api.Types
     ( AccountPostData (..)
-    , AddressForgeAmount (..)
     , AddressAmount (..)
+    , AddressForgeAmount (..)
     , AnyAddress (..)
-    , ForgeTokenData (..)
     , ApiAccountKey (..)
     , ApiAccountKeyShared (..)
     , ApiAccountPublicKey (..)
@@ -138,6 +137,7 @@ import Cardano.Wallet.Api.Types
     , DecodeStakeAddress (..)
     , EncodeAddress (..)
     , EncodeStakeAddress (..)
+    , ForgeTokenData (..)
     , HealthCheckSMASH (..)
     , Iso8601Time (..)
     , KeyFormat (..)
@@ -167,9 +167,6 @@ import Cardano.Wallet.Gen
     , shrinkTxMetadata
     )
 
-import Cardano.Wallet.Primitive.Types.TokenPolicy.Gen
-    ( genTokenNameSmallRange
-    )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DerivationIndex (..)
     , DerivationType (..)
@@ -233,6 +230,8 @@ import Cardano.Wallet.Primitive.Types.TokenMap.Gen
     ( genAssetIdSmallRange, genTokenMapSmallRange, shrinkTokenMapSmallRange )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenFingerprint, mkTokenFingerprint )
+import Cardano.Wallet.Primitive.Types.TokenPolicy.Gen
+    ( genTokenNameSmallRange )
 import Cardano.Wallet.Primitive.Types.Tx
     ( Direction (..), TxIn (..), TxMetadata (..), TxOut (..), TxStatus (..) )
 import Cardano.Wallet.Primitive.Types.UTxO

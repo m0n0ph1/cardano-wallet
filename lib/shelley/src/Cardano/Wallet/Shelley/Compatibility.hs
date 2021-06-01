@@ -127,18 +127,19 @@ import Cardano.Address
     ( unsafeMkAddress )
 import Cardano.Address.Derivation
     ( XPub, xpubPublicKey )
+import qualified Cardano.Address.Script as Cardano.Address
 import Cardano.Api
     ( AllegraEra
     , AnyCardanoEra (..)
-    , TimeLocksSupported(TimeLocksInSimpleScriptV2)
     , AsType (..)
     , CardanoEra (..)
-    , Hash(..)
-    , PaymentKey(..)
+    , Hash (..)
     , MaryEra
     , NetworkId
+    , PaymentKey (..)
     , ShelleyEra
-    , SimpleScript(..)
+    , SimpleScript (..)
+    , TimeLocksSupported (TimeLocksInSimpleScriptV2)
     , deserialiseFromRawBytes
     )
 import Cardano.Api.Shelley
@@ -151,7 +152,6 @@ import Cardano.Ledger.Era
     ( Era (..) )
 import Cardano.Slotting.Slot
     ( EpochNo (..), EpochSize (..) )
-import qualified Cardano.Address.Script as Cardano.Address
 import Cardano.Wallet.Api.Types
     ( DecodeAddress (..)
     , DecodeStakeAddress (..)
@@ -176,7 +176,7 @@ import Control.Applicative
 import Control.Arrow
     ( left )
 import Control.Monad
-    ( when, (>=>), forM )
+    ( forM, when, (>=>) )
 import Crypto.Hash.Utils
     ( blake2b224 )
 import Data.Bifunctor
@@ -273,7 +273,6 @@ import Type.Reflection
 
 import qualified Cardano.Address.Style.Shelley as CA
 import qualified Cardano.Api as Cardano
-import qualified Data.Text as T
 import qualified Cardano.Api.Byron as Cardano
     ( Tx (ByronTx) )
 import qualified Cardano.Api.Shelley as Cardano
@@ -308,6 +307,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Short as SBS
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Ouroboros.Consensus.Shelley.Ledger as O
 import qualified Ouroboros.Network.Block as O

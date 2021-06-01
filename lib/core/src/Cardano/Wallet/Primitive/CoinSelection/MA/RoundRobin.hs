@@ -82,7 +82,6 @@ module Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
 
 import Prelude
 
-import Debug.Trace
 import Algebra.PartialOrd
     ( PartialOrd (..) )
 import Cardano.Numeric.Util
@@ -125,6 +124,7 @@ import Data.Ord
     ( comparing )
 import Data.Set
     ( Set )
+import Debug.Trace
 import Fmt
     ( Buildable (..)
     , Builder

@@ -392,11 +392,12 @@ import Control.Monad.Class.MonadTime
     , diffTime
     , getCurrentTime
     )
+import Control.Monad.Except
+    ( liftEither )
 import Control.Monad.IO.Unlift
     ( MonadIO (..), MonadUnliftIO )
 import Control.Monad.Trans.Class
     ( lift )
-import Control.Monad.Except (liftEither)
 import Control.Monad.Trans.Except
     ( ExceptT (..)
     , catchE
@@ -443,7 +444,7 @@ import Data.List.NonEmpty
 import Data.Maybe
     ( fromMaybe, mapMaybe )
 import Data.Proxy
-    ( Proxy(Proxy) )
+    ( Proxy (Proxy) )
 import Data.Quantity
     ( Quantity (..) )
 import Data.Set
@@ -473,10 +474,10 @@ import UnliftIO.Exception
 import UnliftIO.MVar
     ( modifyMVar_, newMVar )
 
-import qualified Cardano.Crypto.Wallet as CC
-import qualified Cardano.Crypto.Hash as Crypto
-import qualified Cardano.Api
 import qualified Cardano.Address.Script as Cardano.Address
+import qualified Cardano.Api
+import qualified Cardano.Crypto.Hash as Crypto
+import qualified Cardano.Crypto.Wallet as CC
 import qualified Cardano.Wallet.Primitive.AddressDiscovery.Random as Rnd
 import qualified Cardano.Wallet.Primitive.AddressDiscovery.Sequential as Seq
 import qualified Cardano.Wallet.Primitive.AddressDiscovery.Shared as Shared

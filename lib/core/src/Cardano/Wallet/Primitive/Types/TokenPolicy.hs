@@ -39,7 +39,8 @@ module Cardano.Wallet.Primitive.Types.TokenPolicy
 
 import Prelude
 
-import Cardano.Address.Script (KeyHash, Script, unScriptHash, toScriptHash)
+import Cardano.Address.Script
+    ( KeyHash, Script, toScriptHash, unScriptHash )
 import Cardano.Wallet.Primitive.Types.Hash
     ( Hash (..) )
 import Codec.Binary.Bech32.TH
