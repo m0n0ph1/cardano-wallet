@@ -1038,7 +1038,7 @@ makeChange criteria
     totalInputValue :: TokenBundle
     totalInputValue =
       F.fold inputBundles
-      `TokenBundle.add` maybe TokenBundle.empty TokenBundle.fromCoin extraCoinSource
+      `TokenBundle.add` F.foldMap TokenBundle.fromCoin extraCoinSource
       `TokenBundle.add` TokenBundle.fromTokenMap mintInputs
 
     totalOutputValue :: TokenBundle
